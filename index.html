@@ -4,15 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Growelicious — Dispatch Approval Portal</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <!-- Firebase SDKs (compat version — works directly in HTML, no npm needed) -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <!-- Storage disabled — upgrade to Blaze plan to enable photo upload -->
 
-<script>
+<script data-cfasync="false">
   const firebaseConfig = {
     apiKey: "AIzaSyDlbdFHeAMGM8-wg53r026ZihGuNVOncco",
     authDomain: "gl-dispatch.firebaseapp.com",
@@ -267,7 +267,7 @@
     <div class="login-sub">Dispatch Approval Portal — Sign In</div>
     <div class="login-field">
       <label>Email Address</label>
-      <input type="email" id="loginEmail" placeholder="you@growelicious.com">
+      <input type="email" id="loginEmail" placeholder="Enter your email address">
     </div>
     <div class="login-field">
       <label>Password</label>
@@ -529,9 +529,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<div class="toast" id="toast"></div><script data-cfasync="false">
 let editReqId = null;
 
 function openEdit(id) {
@@ -582,9 +580,7 @@ async function saveEdit() {
   btn.innerHTML = '💾 Save Changes';
   btn.disabled = false;
 }
-</script>
-
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+</script><script data-cfasync="false">
 // ════════════════════════════════════════════════════════════════════
 // ROLE MAP — email → role name
 // ════════════════════════════════════════════════════════════════════
@@ -1096,8 +1092,11 @@ async function submitQC() {
     qcPhotosFiles = [];
     toast('✓ QC temperature reading saved to Firestore');
   } catch(e) {
-    toast('E
-<script>
+    toast('Error: ' + e.message, true);
+  }
+}
+</script>
+<script data-cfasync="false">
 /* ── Netlify-safe event binding — no inline onclick handlers ── */
 document.addEventListener('DOMContentLoaded', function() {
 
