@@ -12,20 +12,7 @@
 <script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <!-- Storage disabled — upgrade to Blaze plan to enable photo upload -->
 
-<script data-cfasync="false">
-  const firebaseConfig = {
-    apiKey: "AIzaSyDlbdFHeAMGM8-wg53r026ZihGuNVOncco",
-    authDomain: "gl-dispatch.firebaseapp.com",
-    projectId: "gl-dispatch",
-    storageBucket: "gl-dispatch.firebasestorage.app",
-    messagingSenderId: "197188265244",
-    appId: "1:197188265244:web:2468378d3be50218fe86d9"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db      = firebase.firestore();
-  const auth    = firebase.auth();
-  // Storage disabled (Spark plan) — upgrade to Blaze to enable photo upload
-</script>
+
 
 <style>
   :root {
@@ -305,7 +292,7 @@
     <nav class="sidebar">
       <div class="sidebar-section">Main</div>
       <div class="sidebar-item active" data-action="gotoDash"><span class="icon">📊</span> Dashboard</div>
-      <div class="sidebar-item" id="nav-new" onclick="showView('new-request')"><span class="icon">➕</span> New Dispatch Request</div>
+      <div class="sidebar-item" id="nav-new"><span class="icon">➕</span> New Dispatch Request</div>
       <div class="sidebar-section" style="margin-top:12px">Approvals</div>
       <div class="sidebar-item" data-view="pending"><span class="icon">⏳</span> Pending Approvals <span class="badge-count" id="pendingCount">0</span></div>
       <div class="sidebar-item" data-view="all-requests"><span class="icon">📋</span> All Requests</div>
@@ -529,7 +516,25 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div><script data-cfasync="false">
+<div class="toast" id="toast"></div>
+
+
+<script data-cfasync="false">
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDlbdFHeAMGM8-wg53r026ZihGuNVOncco",
+    authDomain: "gl-dispatch.firebaseapp.com",
+    projectId: "gl-dispatch",
+    storageBucket: "gl-dispatch.firebasestorage.app",
+    messagingSenderId: "197188265244",
+    appId: "1:197188265244:web:2468378d3be50218fe86d9"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db      = firebase.firestore();
+  const auth    = firebase.auth();
+  // Storage disabled (Spark plan) — upgrade to Blaze to enable photo upload
+
+
 let editReqId = null;
 
 function openEdit(id) {
@@ -580,7 +585,8 @@ async function saveEdit() {
   btn.innerHTML = '💾 Save Changes';
   btn.disabled = false;
 }
-</script><script data-cfasync="false">
+
+
 // ════════════════════════════════════════════════════════════════════
 // ROLE MAP — email → role name
 // ════════════════════════════════════════════════════════════════════
@@ -1095,8 +1101,8 @@ async function submitQC() {
     toast('Error: ' + e.message, true);
   }
 }
-</script>
-<script data-cfasync="false">
+
+
 /* ── Netlify-safe event binding — no inline onclick handlers ── */
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -1184,6 +1190,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+
+function showView(name) {
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  var el = document.getElementById('view-' + name);
+  if (el) el.classList.add('active');
+  document.querySelectorAll('.si').forEach(function(i){ i.classList.remove('active'); });
+  var navMap = {'dashboard':'nav-dashboard','new-request':'nav-new','pending':'nav-pending','all-requests':'nav-all','qc-checks':'nav-qc'};
+  var nav = document.getElementById(navMap[name]);
+  if (nav) nav.classList.add('active');
+}
+
+function toast(msg, err) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.style.background = err ? 'var(--red)' : 'var(--navy)';
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function(){ t.style.display='none'; }, 3500);
+}
 </script>
 </body>
 </html>
