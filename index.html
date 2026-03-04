@@ -344,109 +344,33 @@
                   <option value="">— Select —</option>
                   <option>Super Distributor Order</option>
                   <option>Internal Stock Transfer</option>
-                  <option>Retail Order</option>
-                  <option>Export</option>
+                  <option>Retail Order (Train)</option>
                 </select>
               </div>
               <div class="field"><label>Buyer / Distributor Name *</label><input type="text" id="f-buyer" placeholder="e.g. Raj Foods Pvt Ltd"></div>
               <div class="field"><label>Expected Dispatch Date *</label><input type="date" id="f-dispatchDate"></div>
               <div class="field"><label>Vehicle Arrival Date (D-1) *</label><input type="date" id="f-vehicleDate"></div>
-              <div class="field"><label>Transport Mode *</label>
-                <select id="f-transport">
-                  <option value="">— Select —</option>
-                  <option>Reefer Truck</option>
-                  <option>Ship</option>
-                  <option>Train</option>
-                </select>
-              </div>
+              <div class="field"><label>Vehicle Number</label><input type="text" id="f-vehicle" placeholder="e.g. MH12AB1234"></div>
               <div class="field"><label>Payment Terms *</label>
                 <select id="f-payment">
                   <option value="">— Select —</option>
                   <option>Advance</option>
                   <option>Credit</option>
                   <option>Payment After Loading</option>
-                  <option>Others</option>
                 </select>
               </div>
-              <div class="field" id="f-payment-others-wrap" style="display:none"><label>Payment Remarks *</label>
-                <input type="text" id="f-payment-others" placeholder="Specify payment terms...">
-              </div>
             </div>
-
             <div class="section-divider">Product Details</div>
-            <div class="form-grid">
-              <div class="field">
-                <label>Product *</label>
-                <select id="f-product">
-                  <option value="">— Select —</option>
-                  <option>Rohu</option>
-                  <option>Catla</option>
-                  <option>Murrel</option>
-                  <option>Sea Bass</option>
-                  <option>Basa</option>
-                  <option>Tilapia</option>
-                  <option>Roopchand</option>
-                  <option id="f-product-others-opt">Others</option>
-                </select>
-              </div>
-              <div class="field" id="f-product-others-wrap" style="display:none">
-                <label>Product Name (Others)</label>
-                <input type="text" id="f-product-others" placeholder="Enter product name">
-              </div>
-              <div class="field">
-                <label>Spec *</label>
-                <select id="f-spec">
-                  <option value="">— Select —</option>
-                  <option>GG</option>
-                  <option>Gutted</option>
-                  <option>Steaks</option>
-                  <option>Bengali Cut</option>
-                  <option>Fillet</option>
-                  <option>Others</option>
-                </select>
-              </div>
-              <div class="field" id="f-spec-others-wrap" style="display:none">
-                <label>Spec (Others)</label>
-                <input type="text" id="f-spec-others" placeholder="Enter spec">
-              </div>
-            </div>
-
-            <!-- Sub-spec fields — shown only when Fillet is selected -->
-            <div id="f-fillet-section" style="display:none">
-              <div class="section-divider">Fillet Details</div>
-              <div class="form-grid">
-                <div class="field">
-                  <label>Sub Spec *</label>
-                  <select id="f-subspec">
-                    <option value="">— Select —</option>
-                    <option>N0022</option><option>N0023</option><option>N0024</option><option>N0025</option><option>N0056</option>
-                    <option>NWJL</option><option>NWL</option>
-                    <option>G2JL</option><option>G2L</option><option>G3JL</option><option>G3L</option>
-                    <option>G4JL</option><option>G4L</option><option>G5JL</option><option>G5L</option>
-                    <option>FTJL</option><option>FTL</option>
-                    <option>IJ0</option><option>IJ20</option><option>IJ30</option><option>IJ40</option><option>IJ50</option>
-                    <option>IL0</option><option>IL20</option><option>IL30</option><option>IL40</option><option>IL50</option>
-                    <option>IR0</option><option>IR20</option><option>IR30</option><option>IR40</option><option>IR50</option>
-                    <option>MJ0</option><option>MJ20</option><option>MJ30</option><option>MJ40</option><option>MJ50</option>
-                    <option>ML0</option><option>ML20</option><option>ML30</option><option>ML40</option><option>ML50</option>
-                    <option>YJ0</option>
-                  </select>
-                </div>
-                <div class="field"><label>Pieces / Kg</label><input type="text" id="f-pieces-kg" placeholder="e.g. 6-8 pcs/kg"></div>
-                <div class="field"><label>Glaze %</label><input type="text" id="f-glaze" placeholder="e.g. 20%"></div>
-              </div>
-            </div>
-
-            <div class="section-divider">Shipment Details</div>
-            <div class="form-grid">
+            <div class="form-grid cols3">
+              <div class="field"><label>Total Qty (Kg / Cases)</label><input type="text" id="f-qty" placeholder="e.g. 500 Kg"></div>
+              <div class="field"><label>Product</label><input type="text" id="f-product" placeholder="e.g. Frozen Peas"></div>
               <div class="field"><label>Warehouse</label>
                 <select id="f-location"><option>GL Warehouse</option><option>CF Warehouse</option></select>
               </div>
-              <div class="field"><label>Notes / Special Instructions</label>
-                <textarea id="f-notes" placeholder="Any special instructions..." style="min-height:42px"></textarea>
-              </div>
             </div>
-
+            <div class="form-grid cols1" style="margin-top:10px">
+              <div class="field"><label>Notes / Special Instructions</label><textarea id="f-notes" placeholder="Any special instructions..."></textarea></div>
+            </div>
             <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
               <button class="btn btn-primary" id="submitBtn" data-action="submitRequest">🚀 Submit for Approval</button>
               <button class="btn btn-ghost" data-action="gotoDash">Cancel</button>
@@ -749,8 +673,6 @@ auth.onAuthStateChanged(user => {
 
     listenToRequests();
     listenToQCLogs();
-    loadCustomOptions();
-    initFormListeners();
   } else {
     currentUser = null;
     currentRole = null;
@@ -933,44 +855,11 @@ function filterTable(val) {
 // SUBMIT NEW REQUEST
 // ════════════════════════════════════════════════════════════════════
 async function submitRequest() {
-  if (!CAN_CREATE.includes(currentRole)) { toast('Your role cannot create requests', true); return; }
-  const orderType  = document.getElementById('f-orderType').value;
-  const buyer      = document.getElementById('f-buyer').value.trim();
-  const dispDate   = document.getElementById('f-dispatchDate').value;
-  const transport  = document.getElementById('f-transport').value;
-  const payment    = document.getElementById('f-payment').value;
-  const productSel = document.getElementById('f-product').value;
-  const specSel    = document.getElementById('f-spec').value;
-
-  if (!orderType||!buyer||!dispDate||!transport||!payment||!productSel||!specSel) {
-    toast('Please fill all required fields', true); return;
-  }
-  if (payment === 'Others' && !document.getElementById('f-payment-others').value.trim()) {
-    toast('Please specify payment remarks', true); return;
-  }
-  if (productSel === 'Others' && !document.getElementById('f-product-others').value.trim()) {
-    toast('Please enter the product name', true); return;
-  }
-  if (specSel === 'Others' && !document.getElementById('f-spec-others').value.trim()) {
-    toast('Please enter the spec', true); return;
-  }
-  if (specSel === 'Fillet' && !document.getElementById('f-subspec').value) {
-    toast('Please select a Sub Spec for Fillet', true); return;
-  }
-
-  const product = productSel === 'Others' ? document.getElementById('f-product-others').value.trim() : productSel;
-  const spec    = specSel === 'Others'    ? document.getElementById('f-spec-others').value.trim()    : specSel;
-
-  // Save custom entries for future dropdown use
-  if (productSel === 'Others') saveCustomOption('products', product);
-  if (specSel    === 'Others') saveCustomOption('specs',    spec);
-
-  const paymentFinal = payment === 'Others'
-    ? 'Others: ' + document.getElementById('f-payment-others').value.trim()
-    : payment;
-  const subspec  = specSel === 'Fillet' ? document.getElementById('f-subspec').value   : '';
-  const piecesKg = specSel === 'Fillet' ? document.getElementById('f-pieces-kg').value : '';
-  const glaze    = specSel === 'Fillet' ? document.getElementById('f-glaze').value      : '';
+  if (!CAN_CREATE.includes(currentRole)) { toast('Only Planners can create dispatch requests', true); return; }
+  const buyer     = document.getElementById('f-buyer').value.trim();
+  const dispDate  = document.getElementById('f-dispatchDate').value;
+  const payment   = document.getElementById('f-payment').value;
+  if (!orderType || !buyer || !dispDate || !payment) { toast('Please fill all required fields', true); return; }
 
   const btn = document.getElementById('submitBtn');
   btn.innerHTML = '<span class="loading-spinner"></span> Submitting...';
@@ -979,15 +868,19 @@ async function submitRequest() {
   try {
     const dispatchId = 'DISP-' + Date.now().toString().slice(-6);
     await db.collection('dispatch_requests').add({
-      dispatchId, orderType, buyer,
+      dispatchId,
+      orderType,
+      buyer,
       dispatchDate: dispDate,
       vehicleDate:  document.getElementById('f-vehicleDate').value,
-      transport, payment: paymentFinal,
-      product, spec, subspec, piecesKg, glaze,
+      vehicle:      document.getElementById('f-vehicle').value || 'TBD',
+      payment,
+      qty:          document.getElementById('f-qty').value || '—',
+      product:      document.getElementById('f-product').value || '—',
       location:     document.getElementById('f-location').value,
       notes:        document.getElementById('f-notes').value,
       status:       'pending',
-      stage:        'Awaiting PM (Praveen) Sign-off',
+      stage:        'Awaiting Production Manager Sign-off',
       submittedBy:  currentUser.email,
       submittedByName: currentRole,
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
@@ -998,18 +891,13 @@ async function submitRequest() {
         finance: { status:'pending', remark:'', time:null, person:'Mohan Krishna (Finance)' },
       }
     });
-    // Reset form
-    ['f-orderType','f-buyer','f-transport','f-payment','f-product','f-spec',
-     'f-payment-others','f-product-others','f-spec-others','f-subspec','f-pieces-kg','f-glaze','f-notes'].forEach(id => {
+    // Clear form
+    ['f-orderType','f-buyer','f-vehicle','f-payment','f-qty','f-product','f-notes'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.tagName === 'SELECT' ? el.selectedIndex = 0 : el.value = '';
+      el.tagName === 'SELECT' ? el.selectedIndex = 0 : el.value = '';
     });
-    document.getElementById('f-fillet-section').style.display       = 'none';
-    document.getElementById('f-payment-others-wrap').style.display  = 'none';
-    document.getElementById('f-product-others-wrap').style.display  = 'none';
-    document.getElementById('f-spec-others-wrap').style.display     = 'none';
     showView('dashboard');
-    toast('🚀 Request submitted! Praveen (PM) is next to approve.');
+    toast('🚀 Request submitted! Praveenmathangi (Production Manager) is notified next.');
   } catch(e) {
     toast('Error: ' + e.message, true);
   }
@@ -1044,14 +932,9 @@ function openDetail(id) {
     <div class="info-item"><div class="ilabel">Order Type</div><div class="ivalue">${r.orderType||'—'}</div></div>
     <div class="info-item"><div class="ilabel">Buyer</div><div class="ivalue">${r.buyer||'—'}</div></div>
     <div class="info-item"><div class="ilabel">Dispatch Date</div><div class="ivalue">${r.dispatchDate||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Vehicle Arrival (D-1)</div><div class="ivalue">${r.vehicleDate||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Transport Mode</div><div class="ivalue">${r.transport||r.vehicle||'—'}</div></div>
+    <div class="info-item"><div class="ilabel">Vehicle (D-1 by)</div><div class="ivalue">${r.vehicle||'—'} &nbsp;<span style="color:var(--muted);font-size:11px">${r.vehicleDate||''}</span></div></div>
     <div class="info-item"><div class="ilabel">Payment Terms</div><div class="ivalue">${r.payment||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Product</div><div class="ivalue">${r.product||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Spec</div><div class="ivalue">${r.spec||r.qty||'—'}</div></div>
-    ${r.subspec ? `<div class="info-item"><div class="ilabel">Sub Spec</div><div class="ivalue">${r.subspec}</div></div>` : ''}
-    ${r.piecesKg ? `<div class="info-item"><div class="ilabel">Pieces / Kg</div><div class="ivalue">${r.piecesKg}</div></div>` : ''}
-    ${r.glaze ? `<div class="info-item"><div class="ilabel">Glaze</div><div class="ivalue">${r.glaze}</div></div>` : ''}
+    <div class="info-item"><div class="ilabel">Qty / Product</div><div class="ivalue">${r.qty||'—'} · ${r.product||'—'}</div></div>
     <div class="info-item"><div class="ilabel">Warehouse</div><div class="ivalue">${r.location||'—'}</div></div>
     <div class="info-item"><div class="ilabel">Submitted By</div><div class="ivalue">${r.submittedBy||'—'}</div></div>
     ${r.notes?`<div class="info-item" style="grid-column:span 2"><div class="ilabel">Notes</div><div class="ivalue" style="font-weight:400;font-size:12.5px">${r.notes}</div></div>`:''}
@@ -1309,80 +1192,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
-// ════════════════════════════════════════════════════════════════════
-// DYNAMIC FORM — conditional fields, custom options
-// ════════════════════════════════════════════════════════════════════
-
-// Load custom options from Firestore and add to dropdowns
-async function loadCustomOptions() {
-  try {
-    const snap = await db.collection('custom_options').get();
-    snap.forEach(doc => {
-      const data = doc.data();
-      if (data.type === 'products') addOptionToSelect('f-product', data.value);
-      if (data.type === 'specs')    addOptionToSelect('f-spec',    data.value);
-    });
-  } catch(e) { console.log('Custom options not loaded:', e.message); }
-}
-
-function addOptionToSelect(selectId, value) {
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  // Check if already exists
-  for (let opt of sel.options) { if (opt.value === value) return; }
-  // Insert before "Others" option
-  const othersIdx = Array.from(sel.options).findIndex(o => o.value === 'Others');
-  const newOpt = new Option(value, value);
-  if (othersIdx >= 0) sel.insertBefore(newOpt, sel.options[othersIdx]);
-  else sel.appendChild(newOpt);
-}
-
-async function saveCustomOption(type, value) {
-  try {
-    // Check if already saved
-    const existing = await db.collection('custom_options')
-      .where('type','==',type).where('value','==',value).get();
-    if (existing.empty) {
-      await db.collection('custom_options').add({ type, value, addedBy: currentUser.email,
-        addedAt: firebase.firestore.FieldValue.serverTimestamp() });
-      // Add to dropdown immediately for this session
-      addOptionToSelect(type === 'products' ? 'f-product' : 'f-spec', value);
-    }
-  } catch(e) { console.log('Save custom option failed:', e.message); }
-}
-
-function initFormListeners() {
-  // Payment Others
-  const paymentSel = document.getElementById('f-payment');
-  if (paymentSel) {
-    paymentSel.addEventListener('change', function() {
-      document.getElementById('f-payment-others-wrap').style.display =
-        this.value === 'Others' ? 'block' : 'none';
-    });
-  }
-
-  // Product Others
-  const productSel = document.getElementById('f-product');
-  if (productSel) {
-    productSel.addEventListener('change', function() {
-      document.getElementById('f-product-others-wrap').style.display =
-        this.value === 'Others' ? 'block' : 'none';
-    });
-  }
-
-  // Spec — show Others field OR Fillet section
-  const specSel = document.getElementById('f-spec');
-  if (specSel) {
-    specSel.addEventListener('change', function() {
-      document.getElementById('f-spec-others-wrap').style.display =
-        this.value === 'Others' ? 'block' : 'none';
-      document.getElementById('f-fillet-section').style.display =
-        this.value === 'Fillet' ? 'block' : 'none';
-    });
-  }
-}
-
-
+function showView(name) {
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
   var el = document.getElementById('view-' + name);
   if (el) el.classList.add('active');
