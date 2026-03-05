@@ -248,7 +248,7 @@
 .sku-row .sku-num{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
 .sku-remove{position:absolute;top:10px;right:12px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted);line-height:1;padding:2px 5px;border-radius:4px}
 .sku-remove:hover{background:var(--rlt);color:var(--red)}
-.sku-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.sku-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
 .sku-grid .field{margin:0}
 .sku-fillet{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
 .sku-fillet-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
@@ -956,11 +956,15 @@ async function submitRequest() {
     if (!spec)    { toast('Enter spec name for SKU '+(i+1), true); return; }
     if (ps==='Others') saveCustomOption('products', product);
     if (ss==='Others') saveCustomOption('specs', spec);
+    const pkgSel=row.querySelector('.sku-packaging').value;
+    const pkg=pkgSel==='Others'?row.querySelector('.sku-packaging-others').value.trim():pkgSel;
+    if (!pkg) { toast('Select Packaging Type for SKU '+(i+1), true); return; }
+    if (pkgSel==='Others') saveCustomOption('packaging', pkg);
     skus.push({product, spec,
       subspec: ss==='Fillet'?row.querySelector('.sku-subspec').value:'',
       piecesKg:ss==='Fillet'?row.querySelector('.sku-pieces').value:'',
       glaze:   ss==='Fillet'?row.querySelector('.sku-glaze').value:'',
-      qty:qv, qtyUnit:qu});
+      qty:qv, qtyUnit:qu, packaging:pkg});
   }
   const buyer=buyerSel==='Others'?document.getElementById('f-buyer-others').value.trim():buyerSel;
   if (buyerSel==='Others') saveCustomOption('buyers', buyer);
@@ -1042,8 +1046,9 @@ function openDetail(id) {
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Qty</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pcs/Kg</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Glaze</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Packaging</th>
       </tr></thead>
-      <tbody>${r.skus.map((s,i)=>'<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td><td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td><td style="padding:5px 8px">'+(s.spec||'-')+'</td><td style="padding:5px 8px;font-size:11px">'+(s.subspec||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.qty||'-')+' '+(s.qtyUnit||'')+'</td><td style="padding:5px 8px">'+(s.piecesKg||'-')+'</td><td style="padding:5px 8px">'+(s.glaze||'-')+'</td></tr>').join('')}
+      <tbody>${r.skus.map((s,i)=>'<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td><td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td><td style="padding:5px 8px">'+(s.spec||'-')+'</td><td style="padding:5px 8px;font-size:11px">'+(s.subspec||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.qty||'-')+' '+(s.qtyUnit||'')+'</td><td style="padding:5px 8px">'+(s.piecesKg||'-')+'</td><td style="padding:5px 8px">'+(s.glaze||'-')+'</td><td style="padding:5px 8px">'+(s.packaging||'-')+'</td></tr>').join('')}
       </tbody></table></div>`:''}
   `;
 
@@ -1302,10 +1307,17 @@ document.addEventListener('DOMContentLoaded', function() {
 // -- SKU ROW MANAGEMENT --
 let skuCounter=0, customProducts=[], customBuyers=[], customSpecs=[];
 const SUBSPEC_OPTS=['N0022','N0023','N0024','N0025','N0056','NWJL','NWL','G2JL','G2L','G3JL','G3L','G4JL','G4L','G5JL','G5L','FTJL','FTL','IJ0','IJ20','IJ30','IJ40','IJ50','IL0','IL20','IL30','IL40','IL50','IR0','IR20','IR30','IR40','IR50','MJ0','MJ20','MJ30','MJ40','MJ50','ML0','ML20','ML30','ML40','ML50','YJ0'];
-const BASE_PRODUCTS=['Rohu','Catla','Murrel','Sea Bass','Basa','Tilapia','Roopchand'];
-const BASE_SPECS=['GG','Gutted','Steaks','Bengali Cut','Fillet'];
+const BASE_PRODUCTS=['Rohu','Catla','Murrel','Sea Bass','Basa','Tilapia','Roopchand','Shrimp'];
+const BASE_SPECS=['GG','Gutted','Steaks','Bengali Cut','Fillet','Chunks','Fingers','Cubes'];
+const SHRIMP_SPECS=['31/40 PD','41/50 PD'];
+const PACKAGING_TYPES=['IQF Bulk','IQF Retail','Block Frozen','Vacuum Pack','MAP Pack','Loose'];
 function getProdOpts(ex){return[...new Set([...BASE_PRODUCTS,...(ex||[])])].map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';}
-function getSpecOpts2(ex){return[...new Set([...BASE_SPECS,...(ex||[])])].map(s=>'<option>'+s+'</option>').join('')+'<option>Others</option>';}
+function getSpecOpts2(ex, product) {
+  var extra = (ex||[]);
+  var base = [...BASE_SPECS];
+  if (product === 'Shrimp') base = [...base, ...SHRIMP_SPECS];
+  return [...new Set([...base,...extra])].map(s=>'<option>'+s+'</option>').join('')+'<option>Others</option>';
+}
 function getSubOpts(){return SUBSPEC_OPTS.map(s=>'<option>'+s+'</option>').join('');}
 function addSkuRow(){
   skuCounter++;
@@ -1322,6 +1334,14 @@ function addSkuRow(){
         '<input type="text" class="sku-qty-val" placeholder="500" style="flex:1;min-width:0">'+
         '<select class="sku-qty-unit" style="width:80px"><option>Kg</option><option>Cases</option></select>'+
       '</div></div>'+
+      '<div class="field"><label>Packaging Type *</label>'+
+        '<select class="sku-packaging">'+
+          '<option value="">- Select -</option>'+
+          PACKAGING_TYPES.map(p=>'<option>'+p+'</option>').join('')+
+          '<option>Others</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="field sku-packaging-others-wrap" style="display:none"><label>Packaging (Others) *</label><input type="text" class="sku-packaging-others" placeholder="Enter packaging type"></div>'+
     '</div>'+
     '<div class="sku-fillet">'+
       '<div class="sku-fillet-grid">'+
@@ -1333,12 +1353,21 @@ function addSkuRow(){
   div.querySelector('.sku-remove').addEventListener('click',function(){
     document.querySelectorAll('.sku-row').length>1?(div.remove(),renumberSkus()):toast('At least one SKU is required',true);
   });
+  // Product change — update spec options to include shrimp-specific specs
   div.querySelector('.sku-product').addEventListener('change',function(){
     div.querySelector('.sku-product-others-wrap').style.display=this.value==='Others'?'block':'none';
+    // Rebuild spec dropdown based on product
+    const specSel = div.querySelector('.sku-spec');
+    const currentSpec = specSel.value;
+    specSel.innerHTML='<option value="">- Select -</option>'+getSpecOpts2(customSpecs, this.value);
+    if (currentSpec) specSel.value = currentSpec;
   });
   div.querySelector('.sku-spec').addEventListener('change',function(){
     div.querySelector('.sku-spec-others-wrap').style.display=this.value==='Others'?'block':'none';
     div.querySelector('.sku-fillet').style.display=this.value==='Fillet'?'block':'none';
+  });
+  div.querySelector('.sku-packaging').addEventListener('change',function(){
+    div.querySelector('.sku-packaging-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
   document.getElementById('sku-list').appendChild(div);
 }
