@@ -956,15 +956,22 @@ async function submitRequest() {
     if (!spec)    { toast('Enter spec name for SKU '+(i+1), true); return; }
     if (ps==='Others') saveCustomOption('products', product);
     if (ss==='Others') saveCustomOption('specs', spec);
+    const isFillet = ss==='Fillet'||ss==='Skin on Fillet';
+    const pkgTypeSel=row.querySelector('.sku-pkg-type').value;
+    const pkgType=pkgTypeSel==='Others'?row.querySelector('.sku-pkg-type-others').value.trim():pkgTypeSel;
     const pkgSel=row.querySelector('.sku-packaging').value;
     const pkg=pkgSel==='Others'?row.querySelector('.sku-packaging-others').value.trim():pkgSel;
-    if (!pkg) { toast('Select Packaging Type for SKU '+(i+1), true); return; }
-    if (pkgSel==='Others') saveCustomOption('packaging', pkg);
+    const stocks=row.querySelector('.sku-stocks').value||'0';
+    const stockLoc=row.querySelector('.sku-stock-loc').value;
+    const prodPlan=row.querySelector('.sku-prod-plan').value;
+    if (pkgTypeSel==='Others') saveCustomOption('pkgtype', pkgType);
+    if (pkgSel==='Others')     saveCustomOption('packaging', pkg);
     skus.push({product, spec,
-      subspec: ss==='Fillet'?row.querySelector('.sku-subspec').value:'',
-      piecesKg:ss==='Fillet'?row.querySelector('.sku-pieces').value:'',
-      glaze:   ss==='Fillet'?row.querySelector('.sku-glaze').value:'',
-      qty:qv, qtyUnit:qu, packaging:pkg});
+      subspec:  isFillet?row.querySelector('.sku-subspec').value:'',
+      piecesKg: isFillet?row.querySelector('.sku-pieces').value:'',
+      glaze:    isFillet?row.querySelector('.sku-glaze').value:'',
+      pkgType, pkgSpec:row.querySelector('.sku-pkg-spec').value, packaging:pkg,
+      qty:qv, qtyUnit:qu, stocks, stockLoc, productionPlan:prodPlan});
   }
   const buyer=buyerSel==='Others'?document.getElementById('f-buyer-others').value.trim():buyerSel;
   if (buyerSel==='Others') saveCustomOption('buyers', buyer);
@@ -1046,9 +1053,13 @@ function openDetail(id) {
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Qty</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pcs/Kg</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Glaze</th>
-        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Packaging</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pkg Type</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pkg Spec</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Material</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Stocks</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Prod Plan</th>
       </tr></thead>
-      <tbody>${r.skus.map((s,i)=>'<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td><td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td><td style="padding:5px 8px">'+(s.spec||'-')+'</td><td style="padding:5px 8px;font-size:11px">'+(s.subspec||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.qty||'-')+' '+(s.qtyUnit||'')+'</td><td style="padding:5px 8px">'+(s.piecesKg||'-')+'</td><td style="padding:5px 8px">'+(s.glaze||'-')+'</td><td style="padding:5px 8px">'+(s.packaging||'-')+'</td></tr>').join('')}
+      <tbody>${r.skus.map((s,i)=>'<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td><td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td><td style="padding:5px 8px">'+(s.spec||'-')+'</td><td style="padding:5px 8px;font-size:11px">'+(s.subspec||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.qty||'-')+' '+(s.qtyUnit||'')+'</td><td style="padding:5px 8px">'+(s.piecesKg||'-')+'</td><td style="padding:5px 8px">'+(s.glaze||'-')+'</td><td style="padding:5px 8px">'+(s.pkgType||'-')+'</td><td style="padding:5px 8px">'+(s.pkgSpec||'-')+'</td><td style="padding:5px 8px">'+(s.packaging||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.stocks||'0')+' '+(s.stockLoc?'('+s.stockLoc+')':'')+'</td><td style="padding:5px 8px;font-weight:700;color:var(--blue)">'+(s.productionPlan||'-')+'</td></tr>').join('')}
       </tbody></table></div>`:''}
   `;
 
@@ -1308,9 +1319,10 @@ document.addEventListener('DOMContentLoaded', function() {
 let skuCounter=0, customProducts=[], customBuyers=[], customSpecs=[];
 const SUBSPEC_OPTS=['N0022','N0023','N0024','N0025','N0056','NWJL','NWL','G2JL','G2L','G3JL','G3L','G4JL','G4L','G5JL','G5L','FTJL','FTL','IJ0','IJ20','IJ30','IJ40','IJ50','IL0','IL20','IL30','IL40','IL50','IR0','IR20','IR30','IR40','IR50','MJ0','MJ20','MJ30','MJ40','MJ50','ML0','ML20','ML30','ML40','ML50','YJ0'];
 const BASE_PRODUCTS=['Rohu','Catla','Murrel','Sea Bass','Basa','Tilapia','Roopchand','Shrimp'];
-const BASE_SPECS=['GG','Gutted','Steaks','Bengali Cut','Fillet','Chunks','Fingers','Cubes'];
+const BASE_SPECS=['GG','Gutted','Steaks','Bengali Cut','Fillet','Skin on Fillet','Loin','Chunks','Fingers','Cubes'];
 const SHRIMP_SPECS=['31/40 PD','41/50 PD'];
 const PACKAGING_TYPES=['IQF Bulk','IQF Retail','Block Frozen','Vacuum Pack','MAP Pack','Loose'];
+const PKG_TYPES=['Vacuum Packed','With Rider','Without Rider','Individual Packaging'];
 function getProdOpts(ex){return[...new Set([...BASE_PRODUCTS,...(ex||[])])].map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';}
 function getSpecOpts2(ex, product) {
   var extra = (ex||[]);
@@ -1323,52 +1335,100 @@ function addSkuRow(){
   skuCounter++;
   const idx=skuCounter, div=document.createElement('div');
   div.className='sku-row'; div.setAttribute('data-idx',idx);
-  div.innerHTML='<div class="sku-num">SKU #'+idx+'</div>'+
+  const pkgTypeOpts=PKG_TYPES.map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';
+  const pkgOpts=PACKAGING_TYPES.map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';
+  div.innerHTML=
+    '<div class="sku-num">SKU #'+idx+'</div>'+
     '<button type="button" class="sku-remove">x</button>'+
     '<div class="sku-grid">'+
-      '<div class="field"><label>Product *</label><select class="sku-product"><option value="">- Select -</option>'+getProdOpts(customProducts)+'</select></div>'+
-      '<div class="field sku-product-others-wrap" style="display:none"><label>Product (Others) *</label><input type="text" class="sku-product-others" placeholder="Enter product name"></div>'+
-      '<div class="field"><label>Spec *</label><select class="sku-spec"><option value="">- Select -</option>'+getSpecOpts2(customSpecs)+'</select></div>'+
-      '<div class="field sku-spec-others-wrap" style="display:none"><label>Spec (Others) *</label><input type="text" class="sku-spec-others" placeholder="Enter spec"></div>'+
-      '<div class="field"><label>Qty *</label><div style="display:flex;gap:6px">'+
-        '<input type="text" class="sku-qty-val" placeholder="500" style="flex:1;min-width:0">'+
-        '<select class="sku-qty-unit" style="width:80px"><option>Kg</option><option>Cases</option></select>'+
-      '</div></div>'+
-      '<div class="field"><label>Packaging Type *</label>'+
-        '<select class="sku-packaging">'+
+      '<div class="field"><label>Product *</label>'+
+        '<select class="sku-product"><option value="">- Select -</option>'+getProdOpts(customProducts)+'</select></div>'+
+      '<div class="field sku-product-others-wrap" style="display:none"><label>Product (Others) *</label>'+
+        '<input type="text" class="sku-product-others" placeholder="Enter product name"></div>'+
+      '<div class="field"><label>Spec *</label>'+
+        '<select class="sku-spec"><option value="">- Select -</option>'+getSpecOpts2(customSpecs)+'</select></div>'+
+      '<div class="field sku-spec-others-wrap" style="display:none"><label>Spec (Others) *</label>'+
+        '<input type="text" class="sku-spec-others" placeholder="Enter spec"></div>'+
+      '<div class="field"><label>Qty Required *</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<input type="number" class="sku-qty-val" placeholder="500" style="flex:1;min-width:0" min="0">'+
+          '<select class="sku-qty-unit" style="width:80px"><option>Kg</option><option>Cases</option></select>'+
+        '</div></div>'+
+      '<div class="field"><label>Stocks Available</label>'+
+        '<input type="number" class="sku-stocks" placeholder="0" min="0" style="width:100%"></div>'+
+      '<div class="field"><label>Stock Location</label>'+
+        '<select class="sku-stock-loc">'+
           '<option value="">- Select -</option>'+
-          PACKAGING_TYPES.map(p=>'<option>'+p+'</option>').join('')+
-          '<option>Others</option>'+
-        '</select>'+
-      '</div>'+
-      '<div class="field sku-packaging-others-wrap" style="display:none"><label>Packaging (Others) *</label><input type="text" class="sku-packaging-others" placeholder="Enter packaging type"></div>'+
+          '<option>CF Warehouse</option>'+
+          '<option>GL Warehouse</option>'+
+        '</select></div>'+
+      '<div class="field"><label>Production Plan</label>'+
+        '<input type="text" class="sku-prod-plan" readonly style="background:#f8fafc;font-weight:700;color:var(--blue)" placeholder="Auto-calculated"></div>'+
     '</div>'+
-    '<div class="sku-fillet">'+
+    '<div class="sku-fillet" style="display:none">'+
       '<div class="sku-fillet-grid">'+
-        '<div class="field"><label>Sub Spec *</label><select class="sku-subspec"><option value="">- Select -</option>'+getSubOpts()+'</select></div>'+
-        '<div class="field"><label>Pieces / Kg</label><input type="text" class="sku-pieces" placeholder="6-8 pcs/kg"></div>'+
-        '<div class="field"><label>Glaze %</label><input type="text" class="sku-glaze" placeholder="20%"></div>'+
+        '<div class="field"><label>Sub Spec *</label>'+
+          '<select class="sku-subspec"><option value="">- Select -</option>'+getSubOpts()+'</select></div>'+
+        '<div class="field"><label>Pieces / Kg</label>'+
+          '<input type="text" class="sku-pieces" placeholder="6-8 pcs/kg"></div>'+
+        '<div class="field"><label>Glaze %</label>'+
+          '<input type="text" class="sku-glaze" placeholder="20%"></div>'+
+      '</div>'+
+      '<div class="sku-fillet-grid" style="margin-top:10px">'+
+        '<div class="field"><label>Type of Packaging *</label>'+
+          '<select class="sku-pkg-type"><option value="">- Select -</option>'+pkgTypeOpts+'</select></div>'+
+        '<div class="field sku-pkg-type-others-wrap" style="display:none"><label>Packaging Type (Others) *</label>'+
+          '<input type="text" class="sku-pkg-type-others" placeholder="Specify..."></div>'+
+        '<div class="field"><label>Packaging Spec</label>'+
+          '<input type="text" class="sku-pkg-spec" placeholder="e.g. 2kg pack, 500g pack"></div>'+
+        '<div class="field"><label>Packaging Material</label>'+
+          '<select class="sku-packaging"><option value="">- Select -</option>'+pkgOpts+'</select></div>'+
+        '<div class="field sku-packaging-others-wrap" style="display:none"><label>Packaging Material (Others) *</label>'+
+          '<input type="text" class="sku-packaging-others" placeholder="Enter packaging type"></div>'+
       '</div>'+
     '</div>';
+
+  // ── event listeners ──
   div.querySelector('.sku-remove').addEventListener('click',function(){
     document.querySelectorAll('.sku-row').length>1?(div.remove(),renumberSkus()):toast('At least one SKU is required',true);
   });
-  // Product change — update spec options to include shrimp-specific specs
+
+  // Product → rebuild spec options for shrimp
   div.querySelector('.sku-product').addEventListener('change',function(){
     div.querySelector('.sku-product-others-wrap').style.display=this.value==='Others'?'block':'none';
-    // Rebuild spec dropdown based on product
-    const specSel = div.querySelector('.sku-spec');
-    const currentSpec = specSel.value;
-    specSel.innerHTML='<option value="">- Select -</option>'+getSpecOpts2(customSpecs, this.value);
-    if (currentSpec) specSel.value = currentSpec;
+    const specSel=div.querySelector('.sku-spec'), cur=specSel.value;
+    specSel.innerHTML='<option value="">- Select -</option>'+getSpecOpts2(customSpecs,this.value);
+    if(cur) specSel.value=cur;
   });
+
+  // Spec → show fillet section (now contains packaging fields too)
   div.querySelector('.sku-spec').addEventListener('change',function(){
     div.querySelector('.sku-spec-others-wrap').style.display=this.value==='Others'?'block':'none';
-    div.querySelector('.sku-fillet').style.display=this.value==='Fillet'?'block':'none';
+    div.querySelector('.sku-fillet').style.display=this.value==='Fillet'||this.value==='Skin on Fillet'?'block':'none';
+  });
+
+  // Qty / Stocks → auto-calc Production Plan
+  function calcProdPlan(){
+    const qty=parseFloat(div.querySelector('.sku-qty-val').value)||0;
+    const stocks=parseFloat(div.querySelector('.sku-stocks').value)||0;
+    const plan=qty-stocks;
+    const el=div.querySelector('.sku-prod-plan');
+    if(qty===0){el.value=''; return;}
+    if(plan<=0){el.value='Stocks sufficient (no production needed)'; el.style.color='var(--green)'; el.style.fontWeight='600';}
+    else{el.value=plan+' '+div.querySelector('.sku-qty-unit').value; el.style.color='var(--blue)'; el.style.fontWeight='700';}
+  }
+  div.querySelector('.sku-qty-val').addEventListener('input', calcProdPlan);
+  div.querySelector('.sku-stocks').addEventListener('input', calcProdPlan);
+  div.querySelector('.sku-qty-unit').addEventListener('change', calcProdPlan);
+
+  // Packaging type Others
+  div.querySelector('.sku-pkg-type').addEventListener('change',function(){
+    div.querySelector('.sku-pkg-type-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
   div.querySelector('.sku-packaging').addEventListener('change',function(){
     div.querySelector('.sku-packaging-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
+
   document.getElementById('sku-list').appendChild(div);
 }
 function renumberSkus(){document.querySelectorAll('.sku-row').forEach((r,i)=>r.querySelector('.sku-num').textContent='SKU #'+(i+1));}
