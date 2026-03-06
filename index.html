@@ -244,11 +244,12 @@
     .info-grid { grid-template-columns:1fr; }
   }
 
+.sku-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:2px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px}
 .sku-row{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;position:relative}
 .sku-row .sku-num{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
 .sku-remove{position:absolute;top:10px;right:12px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted);line-height:1;padding:2px 5px;border-radius:4px}
 .sku-remove:hover{background:var(--rlt);color:var(--red)}
-.sku-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+.sku-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .sku-grid .field{margin:0}
 .sku-fillet{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
 .sku-fillet-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
@@ -957,21 +958,32 @@ async function submitRequest() {
     if (ps==='Others') saveCustomOption('products', product);
     if (ss==='Others') saveCustomOption('specs', spec);
     const isFillet = ss==='Fillet'||ss==='Skin on Fillet';
+    // Unit validation
+    const sUnit=row.querySelector('.sku-stocks-unit').value;
+    const stocksVal=parseFloat(row.querySelector('.sku-stocks').value)||0;
+    if(stocksVal>0 && sUnit!==qu){toast('Unit mismatch in SKU '+(i+1)+': Qty is '+qu+' but Stocks is '+sUnit,true);return;}
     const pkgTypeSel=row.querySelector('.sku-pkg-type').value;
     const pkgType=pkgTypeSel==='Others'?row.querySelector('.sku-pkg-type-others').value.trim():pkgTypeSel;
     const pkgSel=row.querySelector('.sku-packaging').value;
     const pkg=pkgSel==='Others'?row.querySelector('.sku-packaging-others').value.trim():pkgSel;
-    const stocks=row.querySelector('.sku-stocks').value||'0';
-    const stockLoc=row.querySelector('.sku-stock-loc').value;
     const prodPlan=row.querySelector('.sku-prod-plan').value;
-    if (pkgTypeSel==='Others') saveCustomOption('pkgtype', pkgType);
-    if (pkgSel==='Others')     saveCustomOption('packaging', pkg);
+    const price=row.querySelector('.sku-price').value||'';
+    const glWh=parseFloat(row.querySelector('.sku-stock-gl').value)||0;
+    const cfWh=parseFloat(row.querySelector('.sku-stock-cf').value)||0;
+    if(pkgTypeSel==='Others') saveCustomOption('pkgtype', pkgType);
+    if(pkgSel==='Others')     saveCustomOption('packaging', pkg);
+    // Save stock snapshot to Firestore for next order auto-fill
+    if(stocksVal>0){
+      const key=(product+'|'+spec).toLowerCase();
+      db.collection('sku_stocks').add({key,product,spec,total:stocksVal,unit:sUnit,gl:glWh,cf:cfWh,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),savedBy:currentUser.email});
+    }
     skus.push({product, spec,
       subspec:  isFillet?row.querySelector('.sku-subspec').value:'',
       piecesKg: isFillet?row.querySelector('.sku-pieces').value:'',
       glaze:    isFillet?row.querySelector('.sku-glaze').value:'',
-      pkgType, pkgSpec:row.querySelector('.sku-pkg-spec').value, packaging:pkg,
-      qty:qv, qtyUnit:qu, stocks, stockLoc, productionPlan:prodPlan});
+      pkgType, pkgSpec:isFillet?row.querySelector('.sku-pkg-spec').value:'', packaging:pkg,
+      price, qty:qv, qtyUnit:qu,
+      stocks:stocksVal, stockUnit:sUnit, glWh, cfWh, productionPlan:prodPlan});
   }
   const buyer=buyerSel==='Others'?document.getElementById('f-buyer-others').value.trim():buyerSel;
   if (buyerSel==='Others') saveCustomOption('buyers', buyer);
@@ -1057,9 +1069,12 @@ function openDetail(id) {
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pkg Spec</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Material</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Stocks</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Price</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">GL Wh</th>
+        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">CF Wh</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Prod Plan</th>
       </tr></thead>
-      <tbody>${r.skus.map((s,i)=>'<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td><td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td><td style="padding:5px 8px">'+(s.spec||'-')+'</td><td style="padding:5px 8px;font-size:11px">'+(s.subspec||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.qty||'-')+' '+(s.qtyUnit||'')+'</td><td style="padding:5px 8px">'+(s.piecesKg||'-')+'</td><td style="padding:5px 8px">'+(s.glaze||'-')+'</td><td style="padding:5px 8px">'+(s.pkgType||'-')+'</td><td style="padding:5px 8px">'+(s.pkgSpec||'-')+'</td><td style="padding:5px 8px">'+(s.packaging||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.stocks||'0')+' '+(s.stockLoc?'('+s.stockLoc+')':'')+'</td><td style="padding:5px 8px;font-weight:700;color:var(--blue)">'+(s.productionPlan||'-')+'</td></tr>').join('')}
+      <tbody>${r.skus.map((s,i)=>'<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td><td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td><td style="padding:5px 8px">'+(s.spec||'-')+'</td><td style="padding:5px 8px;font-size:11px">'+(s.subspec||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.qty||'-')+' '+(s.qtyUnit||'')+'</td><td style="padding:5px 8px">'+(s.piecesKg||'-')+'</td><td style="padding:5px 8px">'+(s.glaze||'-')+'</td><td style="padding:5px 8px">'+(s.pkgType||'-')+'</td><td style="padding:5px 8px">'+(s.pkgSpec||'-')+'</td><td style="padding:5px 8px">'+(s.packaging||'-')+'</td><td style="padding:5px 8px;font-weight:600">'+(s.stocks||'0')+' '+(s.stockLoc?'('+s.stockLoc+')':'')+'</td><td style="padding:5px 8px;font-weight:700;color:var(--blue)">'+(s.productionPlan||'-')+'</td><td style="padding:5px 8px;font-weight:600">&#8377;'+(s.price||'-')+'</td><td style="padding:5px 8px">'+(s.glWh||0)+' '+(s.stockUnit||'')+'</td><td style="padding:5px 8px">'+(s.cfWh||0)+' '+(s.stockUnit||'')+'</td><td style="padding:5px 8px;font-weight:700;color:var(--blue)">'+(s.productionPlan||'-')+'</td></tr>').join('')}
       </tbody></table></div>`:''}
   `;
 
@@ -1331,7 +1346,7 @@ function getSpecOpts2(ex, product) {
   return [...new Set([...base,...extra])].map(s=>'<option>'+s+'</option>').join('')+'<option>Others</option>';
 }
 function getSubOpts(){return SUBSPEC_OPTS.map(s=>'<option>'+s+'</option>').join('');}
-function addSkuRow(){
+function addSkuRow(prefill){
   skuCounter++;
   const idx=skuCounter, div=document.createElement('div');
   div.className='sku-row'; div.setAttribute('data-idx',idx);
@@ -1339,33 +1354,67 @@ function addSkuRow(){
   const pkgOpts=PACKAGING_TYPES.map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';
   div.innerHTML=
     '<div class="sku-num">SKU #'+idx+'</div>'+
-    '<button type="button" class="sku-remove">x</button>'+
+    '<button type="button" class="sku-remove" title="Remove SKU">x</button>'+
+
+    // ── BASIC ────────────────────────────────────────────────────────
+    '<div class="sku-section-label">Product &amp; Spec</div>'+
     '<div class="sku-grid">'+
       '<div class="field"><label>Product *</label>'+
         '<select class="sku-product"><option value="">- Select -</option>'+getProdOpts(customProducts)+'</select></div>'+
-      '<div class="field sku-product-others-wrap" style="display:none"><label>Product (Others) *</label>'+
+      '<div class="field sku-product-others-wrap" style="display:none"><label>Product Name *</label>'+
         '<input type="text" class="sku-product-others" placeholder="Enter product name"></div>'+
       '<div class="field"><label>Spec *</label>'+
         '<select class="sku-spec"><option value="">- Select -</option>'+getSpecOpts2(customSpecs)+'</select></div>'+
-      '<div class="field sku-spec-others-wrap" style="display:none"><label>Spec (Others) *</label>'+
+      '<div class="field sku-spec-others-wrap" style="display:none"><label>Spec Name *</label>'+
         '<input type="text" class="sku-spec-others" placeholder="Enter spec"></div>'+
+    '</div>'+
+
+    // ── QTY + PRICE ──────────────────────────────────────────────────
+    '<div class="sku-section-label" style="margin-top:10px">Quantity &amp; Price</div>'+
+    '<div class="sku-grid">'+
       '<div class="field"><label>Qty Required *</label>'+
         '<div style="display:flex;gap:6px">'+
-          '<input type="number" class="sku-qty-val" placeholder="500" style="flex:1;min-width:0" min="0">'+
+          '<input type="number" class="sku-qty-val" placeholder="500" min="0" style="flex:1;min-width:0">'+
           '<select class="sku-qty-unit" style="width:80px"><option>Kg</option><option>Cases</option></select>'+
         '</div></div>'+
-      '<div class="field"><label>Stocks Available</label>'+
-        '<input type="number" class="sku-stocks" placeholder="0" min="0" style="width:100%"></div>'+
-      '<div class="field"><label>Stock Location</label>'+
-        '<select class="sku-stock-loc">'+
-          '<option value="">- Select -</option>'+
-          '<option>CF Warehouse</option>'+
-          '<option>GL Warehouse</option>'+
-        '</select></div>'+
-      '<div class="field"><label>Production Plan</label>'+
-        '<input type="text" class="sku-prod-plan" readonly style="background:#f8fafc;font-weight:700;color:var(--blue)" placeholder="Auto-calculated"></div>'+
+      '<div class="field"><label>Price (per unit)</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<span style="align-self:center;color:var(--muted);font-size:14px">₹</span>'+
+          '<input type="number" class="sku-price" placeholder="0.00" min="0" step="0.01" style="flex:1;min-width:0">'+
+        '</div></div>'+
     '</div>'+
+
+    // ── STOCKS ───────────────────────────────────────────────────────
+    '<div class="sku-section-label" style="margin-top:10px">'+
+      'Stock Availability'+
+      '<span class="sku-stock-tag" style="margin-left:8px;font-size:10px;background:var(--blt);color:var(--blue);padding:2px 7px;border-radius:10px;display:none"></span>'+
+    '</div>'+
+    '<div class="sku-grid">'+
+      '<div class="field"><label>Total Stocks Available</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<input type="number" class="sku-stocks" placeholder="0" min="0" style="flex:1;min-width:0">'+
+          '<select class="sku-stocks-unit" style="width:80px"><option>Kg</option><option>Cases</option></select>'+
+        '</div>'+
+        '<div class="sku-unit-error" style="color:var(--red);font-size:11px;display:none;margin-top:4px">Unit must match Qty Required</div>'+
+      '</div>'+
+      '<div class="field"><label>GL Warehouse</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<input type="number" class="sku-stock-gl" placeholder="0" min="0" style="flex:1;min-width:0">'+
+          '<span class="sku-stock-unit-lbl" style="align-self:center;font-size:12px;color:var(--muted);min-width:32px">Kg</span>'+
+        '</div></div>'+
+      '<div class="field"><label>CF Warehouse</label>'+
+        '<div style="display:flex;gap:6px">'+
+          '<input type="number" class="sku-stock-cf" placeholder="0" min="0" style="flex:1;min-width:0">'+
+          '<span class="sku-stock-unit-lbl2" style="align-self:center;font-size:12px;color:var(--muted);min-width:32px">Kg</span>'+
+        '</div></div>'+
+      '<div class="field"><label>Production Plan</label>'+
+        '<input type="text" class="sku-prod-plan" readonly style="background:#f0f7ff;font-weight:700;border:1px solid #bfd7f0" placeholder="Auto-calculated">'+
+      '</div>'+
+    '</div>'+
+
+    // ── FILLET SECTION (sub-spec + packaging) ────────────────────────
     '<div class="sku-fillet" style="display:none">'+
+      '<div class="sku-section-label" style="margin-top:10px">Fillet Details</div>'+
       '<div class="sku-fillet-grid">'+
         '<div class="field"><label>Sub Spec *</label>'+
           '<select class="sku-subspec"><option value="">- Select -</option>'+getSubOpts()+'</select></div>'+
@@ -1374,54 +1423,47 @@ function addSkuRow(){
         '<div class="field"><label>Glaze %</label>'+
           '<input type="text" class="sku-glaze" placeholder="20%"></div>'+
       '</div>'+
-      '<div class="sku-fillet-grid" style="margin-top:10px">'+
-        '<div class="field"><label>Type of Packaging *</label>'+
+      '<div class="sku-section-label" style="margin-top:10px">Packaging Details</div>'+
+      '<div class="sku-fillet-grid">'+
+        '<div class="field"><label>Type of Packaging</label>'+
           '<select class="sku-pkg-type"><option value="">- Select -</option>'+pkgTypeOpts+'</select></div>'+
-        '<div class="field sku-pkg-type-others-wrap" style="display:none"><label>Packaging Type (Others) *</label>'+
+        '<div class="field sku-pkg-type-others-wrap" style="display:none"><label>Packaging Type (Others)</label>'+
           '<input type="text" class="sku-pkg-type-others" placeholder="Specify..."></div>'+
         '<div class="field"><label>Packaging Spec</label>'+
           '<input type="text" class="sku-pkg-spec" placeholder="e.g. 2kg pack, 500g pack"></div>'+
         '<div class="field"><label>Packaging Material</label>'+
           '<select class="sku-packaging"><option value="">- Select -</option>'+pkgOpts+'</select></div>'+
-        '<div class="field sku-packaging-others-wrap" style="display:none"><label>Packaging Material (Others) *</label>'+
-          '<input type="text" class="sku-packaging-others" placeholder="Enter packaging type"></div>'+
+        '<div class="field sku-packaging-others-wrap" style="display:none"><label>Material (Others)</label>'+
+          '<input type="text" class="sku-packaging-others" placeholder="Enter packaging material"></div>'+
       '</div>'+
     '</div>';
 
-  // ── event listeners ──
+  // ── EVENT LISTENERS ──────────────────────────────────────────────
   div.querySelector('.sku-remove').addEventListener('click',function(){
     document.querySelectorAll('.sku-row').length>1?(div.remove(),renumberSkus()):toast('At least one SKU is required',true);
   });
 
-  // Product → rebuild spec options for shrimp
+  // Product → rebuild spec
   div.querySelector('.sku-product').addEventListener('change',function(){
     div.querySelector('.sku-product-others-wrap').style.display=this.value==='Others'?'block':'none';
     const specSel=div.querySelector('.sku-spec'), cur=specSel.value;
     specSel.innerHTML='<option value="">- Select -</option>'+getSpecOpts2(customSpecs,this.value);
     if(cur) specSel.value=cur;
+    // Auto-fetch stock for new product+spec combo
+    const spec=div.querySelector('.sku-spec').value;
+    if(this.value&&spec) fetchSkuStock(div, this.value, spec);
   });
 
-  // Spec → show fillet section (now contains packaging fields too)
+  // Spec → fillet section + stock fetch
   div.querySelector('.sku-spec').addEventListener('change',function(){
     div.querySelector('.sku-spec-others-wrap').style.display=this.value==='Others'?'block':'none';
-    div.querySelector('.sku-fillet').style.display=this.value==='Fillet'||this.value==='Skin on Fillet'?'block':'none';
+    const isFillet=this.value==='Fillet'||this.value==='Skin on Fillet';
+    div.querySelector('.sku-fillet').style.display=isFillet?'block':'none';
+    const product=div.querySelector('.sku-product').value;
+    if(product&&this.value) fetchSkuStock(div, product, this.value);
   });
 
-  // Qty / Stocks → auto-calc Production Plan
-  function calcProdPlan(){
-    const qty=parseFloat(div.querySelector('.sku-qty-val').value)||0;
-    const stocks=parseFloat(div.querySelector('.sku-stocks').value)||0;
-    const plan=qty-stocks;
-    const el=div.querySelector('.sku-prod-plan');
-    if(qty===0){el.value=''; return;}
-    if(plan<=0){el.value='Stocks sufficient (no production needed)'; el.style.color='var(--green)'; el.style.fontWeight='600';}
-    else{el.value=plan+' '+div.querySelector('.sku-qty-unit').value; el.style.color='var(--blue)'; el.style.fontWeight='700';}
-  }
-  div.querySelector('.sku-qty-val').addEventListener('input', calcProdPlan);
-  div.querySelector('.sku-stocks').addEventListener('input', calcProdPlan);
-  div.querySelector('.sku-qty-unit').addEventListener('change', calcProdPlan);
-
-  // Packaging type Others
+  // Pkg type others
   div.querySelector('.sku-pkg-type').addEventListener('change',function(){
     div.querySelector('.sku-pkg-type-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
@@ -1429,8 +1471,113 @@ function addSkuRow(){
     div.querySelector('.sku-packaging-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
 
+  // Qty unit → sync stock unit labels + validate match
+  div.querySelector('.sku-qty-unit').addEventListener('change',function(){
+    syncUnits(div);
+    calcProdPlan(div);
+  });
+  div.querySelector('.sku-stocks-unit').addEventListener('change',function(){
+    syncUnits(div);
+    calcProdPlan(div);
+  });
+  div.querySelector('.sku-qty-val').addEventListener('input',function(){ calcProdPlan(div); });
+  div.querySelector('.sku-stocks').addEventListener('input',function(){ calcProdPlan(div); });
+  div.querySelector('.sku-stock-gl').addEventListener('input',function(){ syncTotalFromBreakup(div); });
+  div.querySelector('.sku-stock-cf').addEventListener('input',function(){ syncTotalFromBreakup(div); });
+
   document.getElementById('sku-list').appendChild(div);
+
+  // ── PREFILL (from stock lookup) ──────────────────────────────────
+  if(prefill){
+    if(prefill.product) div.querySelector('.sku-product').value=prefill.product;
+    if(prefill.spec)    div.querySelector('.sku-spec').value=prefill.spec;
+    if(prefill.stocksAvailable!==undefined){
+      div.querySelector('.sku-stocks').value=prefill.stocksAvailable;
+      div.querySelector('.sku-stocks-unit').value=prefill.unit||'Kg';
+      div.querySelector('.sku-stock-gl').value=prefill.glWh||0;
+      div.querySelector('.sku-stock-cf').value=prefill.cfWh||0;
+      syncUnits(div);
+      calcProdPlan(div);
+      // Show info tag
+      const tag=div.querySelector('.sku-stock-tag');
+      tag.textContent='Auto-filled from previous orders'; tag.style.display='inline';
+    }
+  }
 }
+
+// ── SKU CALCULATION HELPERS ──────────────────────────────────────────
+function calcProdPlan(div){
+  const qty=parseFloat(div.querySelector('.sku-qty-val').value)||0;
+  const stocks=parseFloat(div.querySelector('.sku-stocks').value)||0;
+  const qUnit=div.querySelector('.sku-qty-unit').value;
+  const sUnit=div.querySelector('.sku-stocks-unit').value;
+  const el=div.querySelector('.sku-prod-plan');
+  if(qUnit!==sUnit&&stocks>0){el.value='Unit mismatch!';el.style.color='var(--red)';return;}
+  if(qty===0){el.value='';return;}
+  const plan=qty-stocks;
+  if(plan<=0){el.value='Stocks sufficient';el.style.color='var(--green)';}
+  else{el.value=plan+' '+qUnit+' to produce';el.style.color='var(--blue)';}
+}
+
+function syncUnits(div){
+  const qUnit=div.querySelector('.sku-qty-unit').value;
+  const sUnit=div.querySelector('.sku-stocks-unit').value;
+  const errEl=div.querySelector('.sku-unit-error');
+  const mismatch=sUnit&&qUnit!==sUnit&&(parseFloat(div.querySelector('.sku-stocks').value)||0)>0;
+  errEl.style.display=mismatch?'block':'none';
+  // Sync unit labels on breakup fields
+  div.querySelectorAll('.sku-stock-unit-lbl,.sku-stock-unit-lbl2').forEach(l=>l.textContent=sUnit);
+}
+
+function syncTotalFromBreakup(div){
+  const gl=parseFloat(div.querySelector('.sku-stock-gl').value)||0;
+  const cf=parseFloat(div.querySelector('.sku-stock-cf').value)||0;
+  div.querySelector('.sku-stocks').value=gl+cf||'';
+  calcProdPlan(div);
+}
+
+// Fetch remaining stock for a SKU key (product+spec) from Firestore
+// Aggregates all PENDING/APPROVED requests, subtracts allocated qty
+async function fetchSkuStock(div, product, spec){
+  if(!db||!product||!spec) return;
+  try {
+    const key=(product+'|'+spec).toLowerCase();
+    const snap=await db.collection('dispatch_requests')
+      .where('status','in',['pending','approved']).get();
+    let allocatedKg=0, allocatedCases=0;
+    snap.forEach(doc=>{
+      const r=doc.data();
+      if(!r.skus) return;
+      r.skus.forEach(s=>{
+        if((s.product+'|'+s.spec).toLowerCase()===key){
+          const q=parseFloat(s.qty)||0;
+          if((s.qtyUnit||'Kg')==='Kg') allocatedKg+=q;
+          else allocatedCases+=q;
+        }
+      });
+    });
+    // Get most recent stock snapshot from sku_stocks collection
+    const stockSnap=await db.collection('sku_stocks')
+      .where('key','==',key).orderBy('updatedAt','desc').limit(1).get();
+    if(!stockSnap.empty){
+      const sd=stockSnap.docs[0].data();
+      const unit=sd.unit||'Kg';
+      const allocated=unit==='Kg'?allocatedKg:allocatedCases;
+      const remaining=Math.max(0,(sd.total||0)-allocated);
+      const glRemain=Math.max(0,(sd.gl||0)-Math.min(allocated,sd.gl||0));
+      const cfRemain=Math.max(0,remaining-glRemain);
+      div.querySelector('.sku-stocks').value=remaining;
+      div.querySelector('.sku-stocks-unit').value=unit;
+      div.querySelector('.sku-stock-gl').value=glRemain;
+      div.querySelector('.sku-stock-cf').value=cfRemain;
+      syncUnits(div); calcProdPlan(div);
+      const tag=div.querySelector('.sku-stock-tag');
+      tag.textContent='Stock auto-filled ('+allocated+' '+unit+' allocated in open orders)';
+      tag.style.display='inline';
+    }
+  } catch(e){ console.log('Stock fetch error:', e.message); }
+}
+
 function renumberSkus(){document.querySelectorAll('.sku-row').forEach((r,i)=>r.querySelector('.sku-num').textContent='SKU #'+(i+1));}
 
 // ── CUSTOM OPTIONS (persist new products/specs to Firestore) ────────
