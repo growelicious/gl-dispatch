@@ -548,7 +548,7 @@
       <ul class="timeline" id="d-timeline"></ul>
       <!-- Finance-specific review panel (shown only to Finance Approver on pending finance step) -->
       <div id="d-finance-panel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:18px;margin-top:12px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:14px">📊 Finance Review — Commercial Details</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:14px">📊 Finance Review — Customer Outstanding, Production Cost & CEO Submission</div>
         <div class="form-grid">
           <div class="field"><label>Payment Terms</label>
             <select id="d-fin-payment-sel">
@@ -583,6 +583,18 @@
         <div style="flex:1"><div class="field"><label>Remark</label><input type="text" id="d-remark" placeholder="Add a note..."></div></div>
         <button class="btn btn-green" id="d-approve-btn" data-action="approve">✓ Approve</button>
         <button class="btn btn-red" id="d-reject-btn" data-action="reject">✗ Reject</button>
+      </div>
+
+      <!-- Planner withdraw / CEO modify panel -->
+      <div id="d-planner-actions" style="display:none;margin-top:12px;padding:14px;background:#fff8f0;border:1px solid #fde68a;border-radius:8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--amber);margin-bottom:10px" id="d-planner-actions-title">📝 Planner Actions</div>
+        <div class="field"><label>Reason / Modification Note <span style="color:var(--red)">*</span></label>
+          <textarea id="d-withdraw-remark" placeholder="Reason for withdrawal or modification details..." style="min-height:54px"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" id="d-edit-from-detail-btn" data-action="editFromDetail">✏️ Modify Order</button>
+          <button class="btn btn-red btn-sm" id="d-withdraw-btn" data-action="withdrawOrder">🗑 Withdraw Order</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1059,14 +1071,18 @@ async function submitRequest() {
       const pktVal  = pkgType;
       const pksVal  = isFillet ? row.querySelector('.sku-pkg-spec').value : '';
       const skuKey  = buildSkuKey(product, spec, subsVal, pcsVal, glzVal);
-      const stockKg = toKg(stocksVal, sUnit);
-      const glKg2   = toKg(glWh, sUnit);
-      const cfKg2   = toKg(cfWh, sUnit);
+      // Stock always stored as Cases
+      const stockInCases = sUnit==='Kg' ? stocksVal/KG_PER_CASE : stocksVal;
+      const glInCases    = sUnit==='Kg' ? glWh/KG_PER_CASE : glWh;
+      const cfInCases    = sUnit==='Kg' ? cfWh/KG_PER_CASE : cfWh;
+      const stockKg = stockInCases * KG_PER_CASE;
+      const glKg2   = glInCases   * KG_PER_CASE;
+      const cfKg2   = cfInCases   * KG_PER_CASE;
       db.collection('sku_stocks').where('key','==',skuKey).get().then(function(snap){
         const data={
           key:skuKey, product, spec,
           subspec:subsVal, piecesKg:pcsVal, glaze:glzVal, pkgType:pktVal, pkgSpec:pksVal,
-          total:stocksVal, unit:sUnit,
+          total:stockInCases, unit:'Cases',
           totalKg:stockKg, glKg:glKg2, cfKg:cfKg2,
           gl:glWh, cf:cfWh,
           updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
@@ -1098,7 +1114,7 @@ async function submitRequest() {
       product:skus[0].product, spec:skus[0].spec,
       location:document.getElementById('f-location').value,
       notes:document.getElementById('f-notes').value,
-      status:'pending', stage:'Awaiting Finance Review — Step 1 (Mohan Krishna)', notifyFinance:true,
+      status:'pending', stage:'Awaiting Finance Review — Outstanding, Production Cost & CEO Submission (Mohan Krishna)', notifyFinance:true,
       submittedBy:currentUser.email, submittedByName:currentRole,
       createdAt:firebase.firestore.FieldValue.serverTimestamp(),
       approvals:{
@@ -1118,7 +1134,7 @@ async function submitRequest() {
     document.getElementById('sku-list').innerHTML='';
     skuCounter=0; addSkuRow();
     showView('dashboard');
-    toast('Request '+dispatchId+' submitted! Praveen (PM) is next to approve.');
+    toast('✓ Request '+dispatchId+' submitted to Finance (Mohan Krishna) for review.');
   } catch(e){toast('Error: '+e.message,true);}
   btn.innerHTML='Submit for Approval'; btn.disabled=false;
 }
@@ -1137,7 +1153,7 @@ function openDetail(id) {
   document.getElementById('d-subtitle').innerHTML = `${r.orderType||''} &nbsp;·&nbsp; ${r.dispatchDate||''} &nbsp;·&nbsp; ${pill(r.status)}`;
 
   // Approval track
-  const trackLabels = ['Finance 1','CEO','GM','PM','QC','Finance 2','Dispatch'];
+  const trackLabels = ['Finance Review','CEO','GM','PM','QC','Finance Final','Dispatch'];
   const trackKeys   = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
   document.getElementById('d-track').innerHTML = trackKeys.map((k,i) => {
     const a = r.approvals?.[k];
@@ -1190,7 +1206,7 @@ function openDetail(id) {
   ];
   ['finance1','ceo','gm','pm','qc','finance2','dispatch'].forEach((k,i) => {
     const a = r.approvals?.[k]||{};
-    const tlLabels=['Finance (Mohan)','CEO (Sajith)','GM (Siva)','PM (Praveen)','QC (Gopinath)','Finance Final (Mohan)','Dispatch (Harish)'];
+    const tlLabels=['Finance Review (Mohan)','CEO (Sajith)','GM (Siva S B)','PM (Praveen)','QC (Gopinath)','Finance Final Clearance (Mohan)','Dispatch Manager (Harish)'];
     tl.push({ who: tlLabels[i]||APPROVAL_CHAIN[i], status: a.status||'pending', note: a.remark||null, time: fmtTime(a.time) });
   });
   document.getElementById('d-timeline').innerHTML = tl.map(t => `
@@ -1218,10 +1234,10 @@ function openDetail(id) {
     actPanel.style.display = 'none';
     const fa = r.approvals?.[myKey] || {};
     const isFinStep2 = myKey === 'finance2';
-    document.getElementById('d-fin-submit-btn').textContent = isFinStep2 ? '✓ Final Clearance →' : 'Submit to CEO →';
+    document.getElementById('d-fin-submit-btn').textContent = isFinStep2 ? '✓ Final Clearance →' : 'Submit to CEO ›';
     document.querySelector('#d-finance-panel .fin-panel-title').textContent = isFinStep2
       ? '📊 Finance Final Clearance — Step 6'
-      : '📊 Finance Review — Step 1 Commercial Details';
+      : '📊 Finance Review — Outstanding, Production Cost & CEO Submission';
     document.getElementById('d-fin-payment-text').value     = fa.paymentTerms || r.payment || '';
     document.getElementById('d-fin-outstanding').value      = fa.outstanding || (isFinStep2 ? (r.approvals?.finance1?.outstanding||'') : '');
     document.getElementById('d-fin-outstanding-note').value = fa.outstandingNote || '';
@@ -1252,7 +1268,7 @@ function openDetail(id) {
       finSummary.style.display = 'block';
       const plNum = parseFloat(fa.pl)||0;
       finSummary.innerHTML =
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px">💼 Finance Step 1 Review</div>'+
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px">💼 Finance Review — Outstanding, Cost &amp; P&amp;L</div>'+
         '<div class="info-grid" style="grid-template-columns:1fr 1fr;gap:8px">'+
         (fa.paymentTerms?'<div class="info-item"><div class="ilabel">Payment Terms</div><div class="ivalue">'+fa.paymentTerms+'</div></div>':'')+
         (fa.outstanding?'<div class="info-item"><div class="ilabel">Customer Outstanding</div><div class="ivalue" style="color:var(--red);font-weight:700">₹'+parseFloat(fa.outstanding).toLocaleString('en-IN')+'</div></div>':'')+
@@ -1262,6 +1278,16 @@ function openDetail(id) {
         (fa.remark?'<div class="info-item" style="grid-column:span 2"><div class="ilabel">Finance Remarks</div><div class="ivalue">'+fa.remark+'</div></div>':'')+
         '</div>';
     } else { finSummary.style.display='none'; }
+  }
+
+  // Planner withdraw / modify — show for Planner/CEO on pending requests
+  const plannerActPanel = document.getElementById('d-planner-actions');
+  if (plannerActPanel) {
+    const canWithdraw = (currentRole==='Planner'||currentRole==='CEO'||currentRole==='Dispatch Manager') && r.status==='pending';
+    plannerActPanel.style.display = canWithdraw ? 'block' : 'none';
+    const titleEl = document.getElementById('d-planner-actions-title');
+    if(titleEl) titleEl.textContent = currentRole==='CEO' ? '📝 CEO — Modify or Reject' : '📝 Planner Actions';
+    document.getElementById('d-withdraw-remark').value = '';
   }
 
   document.getElementById('detailOverlay').classList.add('open');
@@ -1296,7 +1322,7 @@ async function financeSubmit() {
     const update = {
       ['approvals.'+finKey+'.status']:           'approved',
       ['approvals.'+finKey+'.time']:             firebase.firestore.FieldValue.serverTimestamp(),
-      ['approvals.'+finKey+'.remark']:           remark || (isStep2 ? 'Finance final clearance' : 'Finance Step 1 reviewed'),
+      ['approvals.'+finKey+'.remark']:           remark || (isStep2 ? 'Finance final clearance' : 'Finance review submitted to CEO'),
       ['approvals.'+finKey+'.paymentTerms']:     payTerms,
       ['approvals.'+finKey+'.outstanding']:      outstanding,
       ['approvals.'+finKey+'.outstandingNote']:  outNote,
@@ -1332,6 +1358,60 @@ async function financeReject() {
   btn.disabled = false;
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// WITHDRAW / REJECT ORDER (Planner or CEO) — rolls back stock
+// ════════════════════════════════════════════════════════════════
+async function withdrawOrder() {
+  const r = allRequests.find(x => x.id === activeReqId);
+  if (!r) return;
+  const remark = document.getElementById('d-withdraw-remark').value.trim();
+  if (!remark) { toast('Please enter a reason for withdrawal', true); return; }
+  const btn = document.getElementById('d-withdraw-btn');
+  btn.disabled = true; btn.textContent = 'Withdrawing...';
+  try {
+    // 1. Mark request as rejected/withdrawn
+    await db.collection('dispatch_requests').doc(activeReqId).update({
+      status:  'rejected',
+      stage:   'Withdrawn by '+currentRole+' ('+currentUser.email+') — '+remark.slice(0,80),
+      withdrawnBy:   currentUser.email,
+      withdrawnAt:   firebase.firestore.FieldValue.serverTimestamp(),
+      withdrawRemark: remark,
+    });
+
+    // 2. Roll back stock — for each SKU in this order, remove its qty from sku_stocks
+    if (r.skus && r.skus.length) {
+      for (const s of r.skus) {
+        const key = buildSkuKey(s.product, s.spec, s.subspec, s.piecesKg, s.glaze);
+        // qty allocated by this order (convert to Cases)
+        const qtyKg    = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
+        const qtyCases = qtyKg / KG_PER_CASE;
+        // Get current sku_stocks doc and add back
+        const snap = await db.collection('sku_stocks').where('key','==',key).get();
+        if (!snap.empty) {
+          const doc = snap.docs[0];
+          const sd  = doc.data();
+          const newTotal = (sd.total||0) + qtyCases;
+          const newTotalKg = newTotal * KG_PER_CASE;
+          await doc.ref.update({
+            total: newTotal, totalKg: newTotalKg,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    }
+
+    document.getElementById('detailOverlay').classList.remove('open');
+    toast('Order withdrawn and stock rolled back.');
+  } catch(e) { toast('Error: '+e.message, true); }
+  btn.disabled = false; btn.textContent = '🗑 Withdraw Order';
+}
+
+async function editFromDetail() {
+  document.getElementById('detailOverlay').classList.remove('open');
+  setTimeout(()=>openEdit(activeReqId), 100);
+}
+
 async function doApprove() {
   const r = allRequests.find(x => x.id === activeReqId);
   const myKey = getChainKey(currentRole, r);
@@ -1341,7 +1421,7 @@ async function doApprove() {
   btn.innerHTML = '<span class="loading-spinner"></span>'; btn.disabled = true;
   const NEXT_STAGE = {
     'ceo':      'Awaiting GM (Siva S B) Approval',
-    'gm':       'Awaiting PM (Praveen) Sign-off',
+    'gm':       'Awaiting PM (Praveen) Mathangi Sign-off',
     'pm':       'Awaiting QC (Gopinath) Clearance',
     'qc':       'Awaiting Finance Final Clearance — Step 6 (Mohan Krishna)',
     'dispatch': '✅ Fully Approved — Loading Cleared',
@@ -1478,8 +1558,10 @@ document.addEventListener('DOMContentLoaded', function() {
   on('[data-action="submitQC"]',      'click', function(){ submitQC(); });
   on('[data-action="approve"]',       'click', function(){ doApprove(); });
   on('[data-action="reject"]',        'click', function(){ doReject(); });
-  on('[data-action="financeSubmit"]', 'click', function(){ financeSubmit(); });
-  on('[data-action="financeReject"]', 'click', function(){ financeReject(); });
+  on('[data-action="financeSubmit"]',  'click', function(){ financeSubmit(); });
+  on('[data-action="financeReject"]',  'click', function(){ financeReject(); });
+  on('[data-action="withdrawOrder"]',  'click', function(){ withdrawOrder(); });
+  on('[data-action="editFromDetail"]', 'click', function(){ editFromDetail(); });
   on('[data-action="saveEdit"]',      'click', function(){ saveEdit(); });
   on('[data-action="closeEdit"]',     'click', function(){ closeEdit(); });
   on('[data-action="closeDetail"]',   'click', function(){ closeDetail(); });
@@ -1511,7 +1593,7 @@ document.addEventListener('DOMContentLoaded', function() {
       'closeDetail': closeDetail, 'closeEdit': closeEdit,
       'doLogin': doLogin, 'doLogout': doLogout,
       'submitRequest': submitRequest, 'submitQC': submitQC,
-      'doApprove': doApprove, 'doReject': doReject, 'financeSubmit': financeSubmit, 'financeReject': financeReject,
+      'doApprove': doApprove, 'doReject': doReject, 'financeSubmit': financeSubmit, 'financeReject': financeReject, 'withdrawOrder': withdrawOrder, 'editFromDetail': editFromDetail,
       'saveEdit': saveEdit,
     };
     for (var fn in fnMap) {
@@ -1583,26 +1665,36 @@ function updateFilletRequiredMarkers(div, product, spec) {
   const isFillet     = spec==='Fillet' || spec==='Skin on Fillet';
   const isBasaFillet = product==='Basa' && isFillet;
 
-  // Sub Spec label and section title
+  const subsEl   = div.querySelector('.sku-subspec');
   const subLabel = div.querySelector('.sku-subspec-label');
   const secTitle = div.querySelector('.sku-subspec-section-title');
-  // Pieces / Glaze required stars
   const pcsStars = div.querySelectorAll('.sku-pieces-field .req-star, .sku-glaze-field .req-star');
 
-  if (subLabel) {
-    if (isBasaFillet) {
-      subLabel.innerHTML = 'Sub Spec <span style="color:var(--red)">*</span> <span style="font-size:10px;font-weight:400;color:var(--muted)">(required)</span>';
-    } else if (isFillet) {
-      subLabel.innerHTML = 'Sub Spec <span style="font-size:10px;font-weight:400;color:var(--muted)">(optional — will grow over time)</span>';
-    } else {
-      subLabel.innerHTML = 'Sub Spec <span style="font-size:10px;font-weight:400;color:var(--muted)">(optional)</span>';
-    }
+  if (isBasaFillet) {
+    // Enable full subspec list — required
+    subsEl.disabled = false;
+    subsEl.style.background = ''; subsEl.style.color = ''; subsEl.style.cursor = '';
+    subsEl.innerHTML = '<option value="">— Select Sub Spec —</option>' + getSubOpts();
+    if (subLabel) subLabel.innerHTML = 'Sub Spec <span style="color:var(--red)">*</span>';
+    if (secTitle) secTitle.textContent = 'Sub Spec *';
+    pcsStars.forEach(s => s.style.display = 'none');
+  } else if (isFillet) {
+    // Non-Basa fillet: subspec disabled (greyed), shows only Others for future
+    subsEl.disabled = false; // allow Others selection
+    subsEl.style.background = '#f8fafc'; subsEl.style.color = 'var(--muted)'; subsEl.style.cursor = '';
+    subsEl.innerHTML = '<option value="">— n/a (Others to add) —</option><option>Others</option>';
+    if (subLabel) subLabel.innerHTML = 'Sub Spec <span style="font-size:10px;font-weight:400;color:var(--muted)">(future use — select Others to add)</span>';
+    if (secTitle) secTitle.textContent = 'Fillet Details *';
+    pcsStars.forEach(s => s.style.display = 'inline');
+  } else {
+    // Non-fillet spec: subspec fully greyed out — n/a
+    subsEl.disabled = true;
+    subsEl.style.background = '#f0f4f8'; subsEl.style.color = 'var(--muted)'; subsEl.style.cursor = 'not-allowed';
+    subsEl.innerHTML = '<option value="">— n/a —</option>';
+    if (subLabel) subLabel.innerHTML = 'Sub Spec <span style="font-size:10px;font-weight:400;color:var(--muted)">(n/a for this spec)</span>';
+    if (secTitle) secTitle.textContent = 'Details';
+    pcsStars.forEach(s => s.style.display = 'none');
   }
-  if (secTitle) {
-    secTitle.textContent = isBasaFillet ? 'Sub Spec *' : (isFillet ? 'Sub Spec + Fillet Details *' : 'Details');
-  }
-  // Show/hide required stars on Pieces/Glaze (required for non-Basa-Fillet when spec is fillet)
-  pcsStars.forEach(s => s.style.display = (!isBasaFillet && isFillet) ? 'inline' : 'none');
 }
 
 function addSkuRow(prefill){
@@ -1648,22 +1740,23 @@ function addSkuRow(prefill){
       '<span class="sku-stock-tag" style="margin-left:8px;font-size:10px;background:var(--blt);color:var(--blue);padding:2px 7px;border-radius:10px;display:none"></span>'+
     '</div>'+
     '<div class="sku-grid">'+
-      '<div class="field"><label>Total Stocks Available</label>'+
-        '<div style="display:flex;gap:6px">'+
-          '<input type="number" class="sku-stocks" placeholder="0" min="0" style="flex:1;min-width:0">'+
-          '<select class="sku-stocks-unit" style="width:80px"><option>Kg</option><option>Cases</option></select>'+
+      '<div class="field"><label>Total Stocks Available <span style="font-size:10px;font-weight:400;color:var(--muted)">(auto = GL + CF)</span></label>'+
+        '<div style="display:flex;gap:6px;align-items:center">'+
+          '<input type="number" class="sku-stocks" placeholder="0" min="0" readonly '+
+            'style="flex:1;min-width:0;background:#f0f4f8;color:var(--slate);cursor:not-allowed;border:1px dashed var(--border)">'+
+          '<span style="align-self:center;font-size:12px;font-weight:600;color:var(--muted);min-width:40px" class="sku-stocks-cases-lbl">Cases</span>'+
         '</div>'+
-        '<div class="sku-unit-error" style="color:var(--red);font-size:11px;display:none;margin-top:4px">Unit must match Qty Required</div>'+
+        '<div class="sku-unit-error" style="color:var(--red);font-size:11px;display:none;margin-top:4px"></div>'+
       '</div>'+
-      '<div class="field"><label>GL Warehouse</label>'+
+      '<div class="field"><label>GL Warehouse (Cases)</label>'+
         '<div style="display:flex;gap:6px">'+
           '<input type="number" class="sku-stock-gl" placeholder="0" min="0" style="flex:1;min-width:0">'+
-          '<span class="sku-stock-unit-lbl" style="align-self:center;font-size:12px;color:var(--muted);min-width:32px">Kg</span>'+
+          '<span style="align-self:center;font-size:12px;color:var(--muted);min-width:40px">Cases</span>'+
         '</div></div>'+
-      '<div class="field"><label>CF Warehouse</label>'+
+      '<div class="field"><label>CF Warehouse (Cases)</label>'+
         '<div style="display:flex;gap:6px">'+
           '<input type="number" class="sku-stock-cf" placeholder="0" min="0" style="flex:1;min-width:0">'+
-          '<span class="sku-stock-unit-lbl2" style="align-self:center;font-size:12px;color:var(--muted);min-width:32px">Kg</span>'+
+          '<span style="align-self:center;font-size:12px;color:var(--muted);min-width:40px">Cases</span>'+
         '</div></div>'+
       '<div class="field"><label>Production Plan</label>'+
         '<input type="text" class="sku-prod-plan" readonly style="background:#f0f7ff;font-weight:700;border:1px solid #bfd7f0" placeholder="Auto-calculated">'+
@@ -1678,7 +1771,9 @@ function addSkuRow(prefill){
       '<div class="sku-fillet-grid">'+
         '<div class="field sku-subspec-field">'+
           '<label class="sku-subspec-label">Sub Spec</label>'+
-          '<select class="sku-subspec"><option value="">— Select —</option>'+getSubOpts()+'<option>Others</option></select></div>'+
+          '<select class="sku-subspec" disabled style="background:#f0f4f8;color:var(--muted);cursor:not-allowed">'+
+            '<option value="">— n/a —</option>'+
+          '</select></div>'+
         '<div class="field sku-subspec-others-wrap" style="display:none">'+
           '<label>Sub Spec (Others)</label>'+
           '<input type="text" class="sku-subspec-others" placeholder="Enter sub spec — will be saved for future"></div>'+
@@ -1712,7 +1807,9 @@ function addSkuRow(prefill){
     specSel.innerHTML='<option value="">- Select -</option>'+getSpecOpts2(customSpecs,this.value);
     // Reset fillet/subspec section
     div.querySelector('.sku-fillet').style.display='none';
-    div.querySelector('.sku-subspec').selectedIndex=0;
+    const subsEl2=div.querySelector('.sku-subspec');
+    subsEl2.disabled=true; subsEl2.innerHTML='<option value="">— n/a —</option>';
+    subsEl2.style.background='#f0f4f8'; subsEl2.style.color='var(--muted)';
     div.querySelector('.sku-subspec-others-wrap').style.display='none';
     const spec=div.querySelector('.sku-spec').value;
     updateFilletRequiredMarkers(div, this.value, spec);
@@ -1793,45 +1890,39 @@ function addSkuRow(prefill){
 // ── SKU CALCULATION HELPERS ──────────────────────────────────────────
 function calcProdPlan(div){
   const qty   = parseFloat(div.querySelector('.sku-qty-val').value)||0;
-  const stocks= parseFloat(div.querySelector('.sku-stocks').value)||0;
+  const stocks= parseFloat(div.querySelector('.sku-stocks').value)||0; // always Cases
   const qUnit = div.querySelector('.sku-qty-unit').value;
-  const sUnit = div.querySelector('.sku-stocks-unit').value;
   const el    = div.querySelector('.sku-prod-plan');
   if(qty===0){ el.value=''; return; }
 
-  // Convert stock to same unit as qty for comparison
-  const stocksInQtyUnit = convertUnit(stocks, sUnit, qUnit);
-  const plan = qty - stocksInQtyUnit;
+  // Convert qty to Cases for comparison (stock is always Cases)
+  const qtyInCases = qUnit==='Kg' ? qty/KG_PER_CASE : qty;
+  const plan = qtyInCases - stocks;
 
-  // Show conversion note if units differ
-  let convNote = '';
-  if(qUnit !== sUnit && stocks > 0){
-    convNote = ' ('+stocks+' '+sUnit+' → '+stocksInQtyUnit.toFixed(1)+' '+qUnit+')';
-  }
+  let note = qUnit==='Kg' ? ' ('+qty+' Kg = '+qtyInCases.toFixed(1)+' Cases)' : '';
 
   if(plan <= 0){
-    el.value = 'Stocks sufficient'+convNote;
+    el.value = 'Stocks sufficient'+note;
     el.style.color = 'var(--green)';
   } else {
-    el.value = plan.toFixed(plan%1===0?0:1)+' '+qUnit+' to produce'+convNote;
+    el.value = plan.toFixed(plan%1===0?0:1)+' Cases to produce'+note;
     el.style.color = 'var(--blue)';
   }
 }
 
 function syncUnits(div){
-  const sUnit = div.querySelector('.sku-stocks-unit').value;
-  // Sync unit labels on breakup fields
-  div.querySelectorAll('.sku-stock-unit-lbl,.sku-stock-unit-lbl2').forEach(l=>l.textContent=sUnit);
-  // Hide the old mismatch error — conversion now handles cross-unit
-  const errEl = div.querySelector('.sku-unit-error');
-  if(errEl) errEl.style.display='none';
+  // Stock is always in Cases — just recalc prod plan
   calcProdPlan(div);
 }
 
 function syncTotalFromBreakup(div){
-  const gl=parseFloat(div.querySelector('.sku-stock-gl').value)||0;
-  const cf=parseFloat(div.querySelector('.sku-stock-cf').value)||0;
-  div.querySelector('.sku-stocks').value=gl+cf||'';
+  const gl = parseFloat(div.querySelector('.sku-stock-gl').value)||0;
+  const cf = parseFloat(div.querySelector('.sku-stock-cf').value)||0;
+  const total = gl + cf;
+  div.querySelector('.sku-stocks').value = total || '';
+  // Always show in Cases
+  const lbl = div.querySelector('.sku-stocks-cases-lbl');
+  if(lbl) lbl.textContent = 'Cases';
   calcProdPlan(div);
 }
 
