@@ -409,7 +409,13 @@
                 <input type="date" id="f-dispatchDate">
               </div>
               <div class="field"><label>Vehicle Arrival Date (D-1)</label>
-                <input type="date" id="f-vehicleDate">
+                <input type="date" id="f-vehicleDate" placeholder="Auto D-1">
+                <div style="margin-top:5px">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;cursor:pointer">
+                    <input type="checkbox" id="f-vehicle-tba" style="width:14px;height:14px">
+                    Yet to assign
+                  </label>
+                </div>
               </div>
               <div class="field"><label>Transport Mode *</label>
                 <select id="f-transport">
@@ -537,8 +543,42 @@
     <div class="detail-body">
       <div class="approval-track" id="d-track"></div>
       <div class="info-grid" id="d-info"></div>
+      <div id="d-finance-summary" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;margin:12px 0"></div>
       <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px">Activity Log</div>
       <ul class="timeline" id="d-timeline"></ul>
+      <!-- Finance-specific review panel (shown only to Finance Approver on pending finance step) -->
+      <div id="d-finance-panel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:18px;margin-top:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:14px">📊 Finance Review — Commercial Details</div>
+        <div class="form-grid">
+          <div class="field"><label>Payment Terms</label>
+            <select id="d-fin-payment-sel">
+              <option value="">— Same as order —</option>
+              <option>Advance</option><option>Credit</option><option>Payment After Loading</option><option>Others</option>
+            </select>
+            <input type="text" id="d-fin-payment-text" placeholder="Specify / add note on payment terms..." style="margin-top:6px">
+          </div>
+          <div class="field"><label>Customer Outstanding (₹)</label>
+            <input type="number" id="d-fin-outstanding" placeholder="e.g. 50000" min="0" step="0.01">
+            <textarea id="d-fin-outstanding-note" placeholder="Notes on outstanding / credit limit / dues..." style="margin-top:6px;min-height:54px"></textarea>
+          </div>
+          <div class="field"><label>Production Cost (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">optional</span></label>
+            <input type="number" id="d-fin-prod-cost" placeholder="Total estimated production cost" min="0" step="0.01">
+          </div>
+          <div class="field"><label>Trade P&amp;L (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">auto-calculated or manual</span></label>
+            <input type="number" id="d-fin-pl" placeholder="Revenue − Production Cost" step="0.01">
+            <div id="d-fin-pl-auto" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+          </div>
+        </div>
+        <div class="field" style="margin-top:4px"><label>Finance Remarks</label>
+          <textarea id="d-fin-remark" placeholder="Any additional remarks for CEO / operations team..." style="min-height:54px"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <button class="btn btn-primary" id="d-fin-submit-btn" data-action="financeSubmit">Submit to CEO →</button>
+          <button class="btn btn-red btn-sm" id="d-fin-reject-btn" data-action="financeReject">✗ Reject / Query</button>
+        </div>
+      </div>
+
+      <!-- Standard approve/reject for other roles -->
       <div class="approve-actions" id="d-actions">
         <div style="flex:1"><div class="field"><label>Remark</label><input type="text" id="d-remark" placeholder="Add a note..."></div></div>
         <button class="btn btn-green" id="d-approve-btn" data-action="approve">✓ Approve</button>
@@ -686,12 +726,14 @@ const ROLE_MAP = (function(){
   return m;
 })();
 
-// Approval chain: PM → GM → QC → Finance
-const APPROVAL_CHAIN = ['Production Manager','General Manager','QC Manager','Finance Approver'];
-const APPROVAL_KEYS  = { 'Production Manager':'pm', 'General Manager':'gm', 'QC Manager':'qc', 'Finance Approver':'finance' };
+// NEW Approval chain: Finance Review → CEO → PM → GM → QC
+// Finance sees it first (adds commercial terms), CEO approves, then ops chain
+const APPROVAL_CHAIN = ['Finance Approver','CEO','Production Manager','General Manager','QC Manager'];
+const APPROVAL_KEYS  = { 'Finance Approver':'finance', 'CEO':'ceo', 'Production Manager':'pm', 'General Manager':'gm', 'QC Manager':'qc' };
 
 // Roles that can CREATE new dispatch requests
 const CAN_CREATE  = ['Planner', 'Dispatch Manager', 'CEO'];
+// CEO is both creator and approver in chain
 // Roles that can EDIT existing requests (change details, reopen, etc.)
 const CAN_EDIT    = ['Dispatch Manager', 'CEO', 'Planner'];
 // Roles that are view-only
@@ -726,11 +768,16 @@ auth.onAuthStateChanged(user => {
     document.getElementById('dashDate').textContent =
       new Date().toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
 
-    // Set default dates
+    // Set default dates — grey out past dates
     const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
     const tom = new Date(); tom.setDate(today.getDate()+1);
-    document.getElementById('f-dispatchDate').value = tom.toISOString().split('T')[0];
-    document.getElementById('f-vehicleDate').value  = today.toISOString().split('T')[0];
+    const tomStr = tom.toISOString().split('T')[0];
+    const dispEl2 = document.getElementById('f-dispatchDate');
+    if(dispEl2){ dispEl2.min = todayStr; dispEl2.value = tomStr; }
+    // Vehicle date = D-1 of dispatch (today by default)
+    const vehEl = document.getElementById('f-vehicleDate');
+    if(vehEl){ vehEl.min = todayStr; vehEl.value = todayStr; }
 
     // Update pending role info
     document.getElementById('pendingRoleInfo').innerHTML =
@@ -845,14 +892,15 @@ function renderPending() {
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">👁️</div><p>Your role (${currentRole}) has view-only access. Use the All Requests tab to track everything.</p></td></tr>`;
     return;
   }
-  // CEO and Dispatch Manager can view/edit but don't sit in approval chain
-  if (currentRole === 'CEO' || currentRole === 'Dispatch Manager') {
+  // Dispatch Manager views all but doesn't sit in approval chain (CEO does now)
+  // Dispatch Manager can view all but isn't in approval chain
+  if (currentRole === 'Dispatch Manager') {
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>As ${currentRole}, you don't have a step in the approval chain. Use All Requests to view and edit any dispatch.</p></td></tr>`;
     return;
   }
   // Planner has no approval step either
   if (currentRole === 'Planner') {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approvals are handled by PM → GM → QC → Finance. Track progress in All Requests.</p></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → PM → GM → QC. Track progress in All Requests.</p></td></tr>`;
     return;
   }
   const myKey = APPROVAL_KEYS[currentRole];
@@ -957,7 +1005,14 @@ async function submitRequest() {
     if (!spec)    { toast('Enter spec name for SKU '+(i+1), true); return; }
     if (ps==='Others') saveCustomOption('products', product);
     if (ss==='Others') saveCustomOption('specs', spec);
+    // Save custom subspec if Others
+    const rawSub=row.querySelector('.sku-subspec').value;
+    if(rawSub==='Others'){ const os=row.querySelector('.sku-subspec-others')?.value.trim(); if(os) saveCustomOption('subspec',os); }
     const isFillet = ss==='Fillet'||ss==='Skin on Fillet';
+    // Basa + Fillet requires sub-spec
+    if(product==='Basa'&&isFillet&&!row.querySelector('.sku-subspec').value){
+      toast('Select Sub Spec for Basa Fillet in SKU '+(i+1),true); return;
+    }
     // Unit validation
     const sUnit=row.querySelector('.sku-stocks-unit').value;
     const stocksVal=parseFloat(row.querySelector('.sku-stocks').value)||0;
@@ -978,9 +1033,9 @@ async function submitRequest() {
       db.collection('sku_stocks').add({key,product,spec,total:stocksVal,unit:sUnit,gl:glWh,cf:cfWh,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),savedBy:currentUser.email});
     }
     skus.push({product, spec,
-      subspec:  isFillet?row.querySelector('.sku-subspec').value:'',
-      piecesKg: isFillet?row.querySelector('.sku-pieces').value:'',
-      glaze:    isFillet?row.querySelector('.sku-glaze').value:'',
+      subspec:  (()=>{ const sel=row.querySelector('.sku-subspec').value; const oth=row.querySelector('.sku-subspec-others')?.value.trim(); return sel==='Others'?oth:sel; })(),
+      piecesKg: row.querySelector('.sku-pieces').value,
+      glaze:    row.querySelector('.sku-glaze').value,
       pkgType, pkgSpec:isFillet?row.querySelector('.sku-pkg-spec').value:'', packaging:pkg,
       price, qty:qv, qtyUnit:qu,
       stocks:stocksVal, stockUnit:sUnit, glWh, cfWh, productionPlan:prodPlan});
@@ -994,15 +1049,21 @@ async function submitRequest() {
     const dispatchId='DISP-'+Date.now().toString().slice(-6);
     await db.collection('dispatch_requests').add({
       dispatchId, orderType, buyer, dispatchDate:dispDate,
-      vehicleDate:document.getElementById('f-vehicleDate').value,
+      vehicleDate:(document.getElementById('f-vehicle-tba')&&document.getElementById('f-vehicle-tba').checked)?'Yet to assign':document.getElementById('f-vehicleDate').value,
       transport, payment:payFinal, skus,
       product:skus[0].product, spec:skus[0].spec,
       location:document.getElementById('f-location').value,
       notes:document.getElementById('f-notes').value,
-      status:'pending', stage:'Awaiting PM (Praveen) Sign-off',
+      status:'pending', stage:'Awaiting Finance Review (Mohan Krishna)', notifyFinance:true,
       submittedBy:currentUser.email, submittedByName:currentRole,
       createdAt:firebase.firestore.FieldValue.serverTimestamp(),
-      approvals:{pm:{status:'pending',remark:'',time:null},gm:{status:'pending',remark:'',time:null},qc:{status:'pending',remark:'',time:null},finance:{status:'pending',remark:'',time:null}}
+      approvals:{
+        finance:{status:'pending',remark:'',time:null,paymentTerms:'',outstanding:'',productionCost:'',pl:''},
+        ceo:    {status:'pending',remark:'',time:null},
+        pm:     {status:'pending',remark:'',time:null},
+        gm:     {status:'pending',remark:'',time:null},
+        qc:     {status:'pending',remark:'',time:null},
+      }
     });
     ['f-payment-others','f-buyer-others','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     ['f-orderType','f-buyer','f-transport','f-payment','f-location'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
@@ -1030,8 +1091,8 @@ function openDetail(id) {
   document.getElementById('d-subtitle').innerHTML = `${r.orderType||''} &nbsp;·&nbsp; ${r.dispatchDate||''} &nbsp;·&nbsp; ${pill(r.status)}`;
 
   // Approval track
-  const trackLabels = ['PM','GM','QC','Finance'];
-  const trackKeys   = ['pm','gm','qc','finance'];
+  const trackLabels = ['Finance','CEO','PM','GM','QC'];
+  const trackKeys   = ['finance','ceo','pm','gm','qc'];
   document.getElementById('d-track').innerHTML = trackKeys.map((k,i) => {
     const a = r.approvals?.[k];
     const st = a?.status||'pending';
@@ -1082,7 +1143,7 @@ function openDetail(id) {
   const tl = [
     { who: r.submittedBy||'—', role:'Dispatch Manager', status:'done', note:'Request submitted', time: fmtTime(r.createdAt) }
   ];
-  ['pm','gm','qc','finance'].forEach((k,i) => {
+  ['finance','ceo','pm','gm','qc'].forEach((k,i) => {
     const a = r.approvals?.[k]||{};
     tl.push({ who: APPROVAL_CHAIN[i], role: APPROVAL_CHAIN[i], status: a.status||'pending', note: a.remark||null, time: fmtTime(a.time) });
   });
@@ -1098,11 +1159,58 @@ function openDetail(id) {
   const myApproval = r.approvals?.[myKey];
   const myIdx = APPROVAL_CHAIN.indexOf(currentRole);
   const prevAllDone = myIdx <= 0 || APPROVAL_CHAIN.slice(0, myIdx).every(role => r.approvals?.[APPROVAL_KEYS[role]]?.status === 'approved');
-  // Only approvers in chain can approve/reject — not CEO, Dispatch Manager, Planner, or Sales Head
   const isApprover = APPROVAL_CHAIN.includes(currentRole);
-  const canAct = isApprover && myApproval && myApproval.status === 'pending' && prevAllDone && r.status === 'pending';
-  document.getElementById('d-actions').style.display = canAct ? 'flex' : 'none';
-  document.getElementById('d-remark').value = '';
+  const myApprovalObj = r.approvals?.[myKey];
+  const isMyTurn = isApprover && myApprovalObj && myApprovalObj.status==='pending' && prevAllDone && r.status==='pending';
+
+  const finPanel = document.getElementById('d-finance-panel');
+  const actPanel = document.getElementById('d-actions');
+
+  if (currentRole==='Finance Approver' && isMyTurn) {
+    finPanel.style.display = 'block';
+    actPanel.style.display = 'none';
+    const fa = r.approvals?.finance || {};
+    document.getElementById('d-fin-payment-text').value    = fa.paymentTerms || r.payment || '';
+    document.getElementById('d-fin-outstanding').value     = fa.outstanding || '';
+    document.getElementById('d-fin-outstanding-note').value= fa.outstandingNote || '';
+    document.getElementById('d-fin-prod-cost').value       = fa.productionCost || '';
+    document.getElementById('d-fin-pl').value              = fa.pl || '';
+    document.getElementById('d-fin-remark').value          = fa.remark || '';
+    const revenue = (r.skus||[]).reduce(function(sum,s){return sum+(parseFloat(s.price)||0)*(parseFloat(s.qty)||0);},0);
+    const plAuto = document.getElementById('d-fin-pl-auto');
+    if (revenue > 0) {
+      plAuto.textContent = 'Order revenue (price x qty): ₹' + revenue.toLocaleString('en-IN');
+      if (!fa.pl) document.getElementById('d-fin-pl').value = revenue.toFixed(2);
+    }
+    document.getElementById('d-fin-prod-cost').oninput = function(){
+      const cost=parseFloat(this.value)||0;
+      if(revenue>0) document.getElementById('d-fin-pl').value=(revenue-cost).toFixed(2);
+    };
+  } else {
+    finPanel.style.display = 'none';
+    actPanel.style.display = isMyTurn ? 'flex' : 'none';
+    document.getElementById('d-remark').value = '';
+  }
+
+  // Finance summary — show after finance has reviewed
+  const finSummary = document.getElementById('d-finance-summary');
+  if (finSummary) {
+    const fa = r.approvals?.finance || {};
+    if (fa.status==='approved' && (fa.paymentTerms||fa.outstanding||fa.pl)) {
+      finSummary.style.display = 'block';
+      const plNum = parseFloat(fa.pl)||0;
+      finSummary.innerHTML =
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--green);margin-bottom:10px">Finance Review Summary</div>'+
+        '<div class="info-grid" style="grid-template-columns:1fr 1fr;gap:8px">'+
+        (fa.paymentTerms?'<div class="info-item"><div class="ilabel">Payment Terms</div><div class="ivalue">'+fa.paymentTerms+'</div></div>':'')+
+        (fa.outstanding?'<div class="info-item"><div class="ilabel">Outstanding (₹)</div><div class="ivalue" style="color:var(--red);font-weight:700">₹'+parseFloat(fa.outstanding).toLocaleString('en-IN')+'</div></div>':'')+
+        (fa.productionCost?'<div class="info-item"><div class="ilabel">Production Cost</div><div class="ivalue">₹'+parseFloat(fa.productionCost).toLocaleString('en-IN')+'</div></div>':'')+
+        (fa.pl?'<div class="info-item"><div class="ilabel">Trade P&amp;L</div><div class="ivalue" style="font-weight:700;color:'+(plNum>=0?'var(--green)':'var(--red)')+'">₹'+plNum.toLocaleString('en-IN')+'</div></div>':'')+
+        (fa.outstandingNote?'<div class="info-item" style="grid-column:span 2"><div class="ilabel">Outstanding Note</div><div class="ivalue">'+fa.outstandingNote+'</div></div>':'')+
+        (fa.remark?'<div class="info-item" style="grid-column:span 2"><div class="ilabel">Finance Remarks</div><div class="ivalue">'+fa.remark+'</div></div>':'')+
+        '</div>';
+    } else { finSummary.style.display='none'; }
+  }
 
   document.getElementById('detailOverlay').classList.add('open');
 }
@@ -1110,6 +1218,58 @@ function openDetail(id) {
 function closeDetail(e) {
   if (!e || e.target === document.getElementById('detailOverlay'))
     document.getElementById('detailOverlay').classList.remove('open');
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// FINANCE SUBMIT TO CEO
+// ════════════════════════════════════════════════════════════════════
+async function financeSubmit() {
+  const r = allRequests.find(x => x.id === activeReqId);
+  if (!r) return;
+  const payTerms  = document.getElementById('d-fin-payment-text').value.trim();
+  const outstanding = document.getElementById('d-fin-outstanding').value;
+  const outNote   = document.getElementById('d-fin-outstanding-note').value.trim();
+  const prodCost  = document.getElementById('d-fin-prod-cost').value;
+  const pl        = document.getElementById('d-fin-pl').value;
+  const remark    = document.getElementById('d-fin-remark').value.trim();
+  const btn = document.getElementById('d-fin-submit-btn');
+  btn.innerHTML = '<span class="loading-spinner"></span> Submitting...'; btn.disabled = true;
+  try {
+    await db.collection('dispatch_requests').doc(activeReqId).update({
+      'approvals.finance.status':         'approved',
+      'approvals.finance.time':           firebase.firestore.FieldValue.serverTimestamp(),
+      'approvals.finance.remark':         remark || 'Finance reviewed',
+      'approvals.finance.paymentTerms':   payTerms,
+      'approvals.finance.outstanding':    outstanding,
+      'approvals.finance.outstandingNote':outNote,
+      'approvals.finance.productionCost': prodCost,
+      'approvals.finance.pl':             pl,
+      stage: 'Awaiting CEO (Sajith) Approval',
+    });
+    document.getElementById('detailOverlay').classList.remove('open');
+    toast('✓ Finance review submitted to CEO (Sajith)');
+  } catch(e) { toast('Error: '+e.message, true); }
+  btn.innerHTML = 'Submit to CEO →'; btn.disabled = false;
+}
+
+async function financeReject() {
+  const remark = document.getElementById('d-fin-remark').value.trim();
+  if (!remark) { toast('Please add a reason / query before rejecting', true); return; }
+  const btn = document.getElementById('d-fin-reject-btn');
+  btn.innerHTML = '<span class="loading-spinner"></span>'; btn.disabled = true;
+  try {
+    await db.collection('dispatch_requests').doc(activeReqId).update({
+      'approvals.finance.status': 'rejected',
+      'approvals.finance.time':   firebase.firestore.FieldValue.serverTimestamp(),
+      'approvals.finance.remark': remark,
+      status: 'rejected',
+      stage:  'Rejected / Query by Finance (Mohan Krishna) — ' + remark.slice(0,60),
+    });
+    document.getElementById('detailOverlay').classList.remove('open');
+    toast('Request returned with query. Planner will be notified.', true);
+  } catch(e) { toast('Error: '+e.message, true); }
+  btn.innerHTML = '✗ Reject / Query'; btn.disabled = false;
 }
 
 async function doApprove() {
@@ -1132,10 +1292,11 @@ async function doApprove() {
     };
 
     const STAGE_LABELS = {
-      'Production Manager': 'Awaiting Praveenmathangi (PM) Sign-off',
-      'General Manager':    'Awaiting Siva S B (GM) Final Approval',
-      'QC Manager':         'Awaiting Gopinath (QC) Clearance',
-      'Finance Approver':   'Awaiting Mohan Krishna (Finance) Clearance',
+      'Finance Approver':   'Awaiting CEO (Sajith) Approval',
+      'CEO':                'Awaiting PM (Praveen) Sign-off',
+      'Production Manager': 'Awaiting GM (Siva) Approval',
+      'General Manager':    'Awaiting QC (Gopinath) Clearance',
+      'QC Manager':         '✅ All Approved — Loading Cleared',
     };
     if (allApproved) {
       update.status = 'approved';
@@ -1274,6 +1435,8 @@ document.addEventListener('DOMContentLoaded', function() {
   on('[data-action="submitQC"]',      'click', function(){ submitQC(); });
   on('[data-action="approve"]',       'click', function(){ doApprove(); });
   on('[data-action="reject"]',        'click', function(){ doReject(); });
+  on('[data-action="financeSubmit"]', 'click', function(){ financeSubmit(); });
+  on('[data-action="financeReject"]', 'click', function(){ financeReject(); });
   on('[data-action="saveEdit"]',      'click', function(){ saveEdit(); });
   on('[data-action="closeEdit"]',     'click', function(){ closeEdit(); });
   on('[data-action="closeDetail"]',   'click', function(){ closeDetail(); });
@@ -1305,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', function() {
       'closeDetail': closeDetail, 'closeEdit': closeEdit,
       'doLogin': doLogin, 'doLogout': doLogout,
       'submitRequest': submitRequest, 'submitQC': submitQC,
-      'doApprove': doApprove, 'doReject': doReject,
+      'doApprove': doApprove, 'doReject': doReject, 'financeSubmit': financeSubmit, 'financeReject': financeReject,
       'saveEdit': saveEdit,
     };
     for (var fn in fnMap) {
@@ -1334,16 +1497,31 @@ document.addEventListener('DOMContentLoaded', function() {
 let skuCounter=0, customProducts=[], customBuyers=[], customSpecs=[];
 const SUBSPEC_OPTS=['N0022','N0023','N0024','N0025','N0056','NWJL','NWL','G2JL','G2L','G3JL','G3L','G4JL','G4L','G5JL','G5L','FTJL','FTL','IJ0','IJ20','IJ30','IJ40','IJ50','IL0','IL20','IL30','IL40','IL50','IR0','IR20','IR30','IR40','IR50','MJ0','MJ20','MJ30','MJ40','MJ50','ML0','ML20','ML30','ML40','ML50','YJ0'];
 const BASE_PRODUCTS=['Rohu','Catla','Murrel','Sea Bass','Basa','Tilapia','Roopchand','Shrimp'];
+// Product-specific spec maps
+const PRODUCT_SPECS = {
+  'Rohu':    ['GG','Gutted','Steaks','Bengali Cut'],
+  'Catla':   ['GG','Gutted','Steaks','Bengali Cut'],
+  'Tilapia': ['Loin','Chunks','Fingers','Cubes','Fillet','Steaks','GG','Gutted'],
+  'Murrel':  ['Fillet','Skin on Fillet','Steaks','GG','Gutted','Loin','Fingers','Cubes','Chunks'],
+  'Sea Bass':['Fillet','Skin on Fillet','Steaks','GG','Gutted','Loin','Fingers','Cubes','Chunks'],
+  'Roopchand':['GG','Gutted','Steaks'],
+  'Shrimp':  ['PD','31/40 PD','41/50 PD'],
+  'Basa':    ['GG','Gutted','Fillet','Cubes','Fingers','Chunks','Steaks','Loin'],
+};
 const BASE_SPECS=['GG','Gutted','Steaks','Bengali Cut','Fillet','Skin on Fillet','Loin','Chunks','Fingers','Cubes'];
-const SHRIMP_SPECS=['31/40 PD','41/50 PD'];
 const PACKAGING_TYPES=['IQF Bulk','IQF Retail','Block Frozen','Vacuum Pack','MAP Pack','Loose'];
 const PKG_TYPES=['Vacuum Packed','With Rider','Without Rider','Individual Packaging'];
 function getProdOpts(ex){return[...new Set([...BASE_PRODUCTS,...(ex||[])])].map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';}
-function getSpecOpts2(ex, product) {
-  var extra = (ex||[]);
-  var base = [...BASE_SPECS];
-  if (product === 'Shrimp') base = [...base, ...SHRIMP_SPECS];
-  return [...new Set([...base,...extra])].map(s=>'<option>'+s+'</option>').join('')+'<option>Others</option>';
+function getSpecOpts2(extra, product) {
+  var base;
+  if (product && PRODUCT_SPECS[product]) {
+    base = [...PRODUCT_SPECS[product]];
+  } else {
+    base = [...BASE_SPECS];
+  }
+  // merge custom extras that aren't already in base
+  (extra||[]).forEach(function(e){ if(!base.includes(e)) base.push(e); });
+  return base.map(function(s){ return '<option>'+s+'</option>'; }).join('') + '<option>Others</option>';
 }
 function getSubOpts(){return SUBSPEC_OPTS.map(s=>'<option>'+s+'</option>').join('');}
 function addSkuRow(prefill){
@@ -1414,10 +1592,12 @@ function addSkuRow(prefill){
 
     // ── FILLET SECTION (sub-spec + packaging) ────────────────────────
     '<div class="sku-fillet" style="display:none">'+
-      '<div class="sku-section-label" style="margin-top:10px">Fillet Details</div>'+
+      '<div class="sku-section-label" style="margin-top:10px">Sub Spec <span style="font-weight:400;text-transform:none;font-size:10px">(Required for Basa Fillet · Optional for others)</span></div>'+
       '<div class="sku-fillet-grid">'+
-        '<div class="field"><label>Sub Spec *</label>'+
-          '<select class="sku-subspec"><option value="">- Select -</option>'+getSubOpts()+'</select></div>'+
+        '<div class="field"><label>Sub Spec</label>'+
+          '<select class="sku-subspec"><option value="">- None / Select -</option>'+getSubOpts()+'<option>Others</option></select></div>'+
+        '<div class="field sku-subspec-others-wrap" style="display:none"><label>Sub Spec (Others)</label>'+
+          '<input type="text" class="sku-subspec-others" placeholder="Enter sub spec"></div>'+
         '<div class="field"><label>Pieces / Kg</label>'+
           '<input type="text" class="sku-pieces" placeholder="6-8 pcs/kg"></div>'+
         '<div class="field"><label>Glaze %</label>'+
@@ -1446,24 +1626,38 @@ function addSkuRow(prefill){
   // Product → rebuild spec
   div.querySelector('.sku-product').addEventListener('change',function(){
     div.querySelector('.sku-product-others-wrap').style.display=this.value==='Others'?'block':'none';
-    const specSel=div.querySelector('.sku-spec'), cur=specSel.value;
+    const specSel=div.querySelector('.sku-spec');
     specSel.innerHTML='<option value="">- Select -</option>'+getSpecOpts2(customSpecs,this.value);
-    if(cur) specSel.value=cur;
-    // Auto-fetch stock for new product+spec combo
+    // Reset fillet/subspec section
+    div.querySelector('.sku-fillet').style.display='none';
+    div.querySelector('.sku-subspec').selectedIndex=0;
+    div.querySelector('.sku-subspec-others-wrap').style.display='none';
     const spec=div.querySelector('.sku-spec').value;
     if(this.value&&spec) fetchSkuStock(div, this.value, spec);
   });
 
-  // Spec → fillet section + stock fetch
+  // Spec → show sub-spec section + stock fetch
   div.querySelector('.sku-spec').addEventListener('change',function(){
     div.querySelector('.sku-spec-others-wrap').style.display=this.value==='Others'?'block':'none';
     const isFillet=this.value==='Fillet'||this.value==='Skin on Fillet';
-    div.querySelector('.sku-fillet').style.display=isFillet?'block':'none';
+    // Show fillet/packaging section for fillet specs; show sub-spec section for all non-empty specs
+    div.querySelector('.sku-fillet').style.display=this.value&&this.value!=='Others'?'block':'none';
+    // If Basa + Fillet: use full subspec list. Otherwise: optional with Others
     const product=div.querySelector('.sku-product').value;
+    const subsEl=div.querySelector('.sku-subspec');
+    if(product==='Basa'&&isFillet){
+      subsEl.innerHTML='<option value="">- Select -</option>'+getSubOpts();
+    } else {
+      subsEl.innerHTML='<option value="">- None / Select -</option>'+getSubOpts()+'<option>Others</option>';
+    }
+    div.querySelector('.sku-subspec-others-wrap').style.display='none';
     if(product&&this.value) fetchSkuStock(div, product, this.value);
   });
 
   // Pkg type others
+  div.querySelector('.sku-subspec').addEventListener('change',function(){
+    div.querySelector('.sku-subspec-others-wrap').style.display=this.value==='Others'?'block':'none';
+  });
   div.querySelector('.sku-pkg-type').addEventListener('change',function(){
     div.querySelector('.sku-pkg-type-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
@@ -1616,13 +1810,48 @@ async function saveCustomOption(type, value) {
 // ── FORM CONDITIONAL FIELDS ──────────────────────────────────────────
 function initFormListeners() {
   const pay = document.getElementById('f-payment');
-  if (pay) pay.addEventListener('change', function(){document.getElementById('f-payment-others-wrap').style.display=this.value==='Others'?'block':'none';});
+  if (pay) pay.addEventListener('change', function(){
+    document.getElementById('f-payment-others-wrap').style.display=this.value==='Others'?'block':'none';
+  });
   const buyerSel = document.getElementById('f-buyer');
-  if (buyerSel) buyerSel.addEventListener('change', function(){document.getElementById('f-buyer-others-wrap').style.display=this.value==='Others'?'block':'none';});
+  if (buyerSel) buyerSel.addEventListener('change', function(){
+    document.getElementById('f-buyer-others-wrap').style.display=this.value==='Others'?'block':'none';
+  });
+
+  // Dispatch date → auto-set vehicle D-1, enforce min today
+  const dispDate = document.getElementById('f-dispatchDate');
+  const vehDate  = document.getElementById('f-vehicleDate');
+  const vehTba   = document.getElementById('f-vehicle-tba');
+  if(dispDate) {
+    dispDate.addEventListener('change', function(){
+      if(vehTba&&vehTba.checked) return; // skip if "yet to assign"
+      if(!this.value) return;
+      const d = new Date(this.value);
+      d.setDate(d.getDate()-1); // D-1
+      const d1 = d.toISOString().split('T')[0];
+      if(vehDate) vehDate.value = d1;
+    });
+  }
+  if(vehTba) {
+    vehTba.addEventListener('change', function(){
+      if(vehDate) {
+        vehDate.disabled = this.checked;
+        vehDate.value = this.checked ? '' : '';
+        if(!this.checked && dispDate&&dispDate.value){
+          const d=new Date(dispDate.value); d.setDate(d.getDate()-1);
+          vehDate.value=d.toISOString().split('T')[0];
+        }
+      }
+    });
+  }
+
   const addBtn = document.getElementById('addSkuBtn');
-  if (addBtn) addBtn.addEventListener('click', addSkuRow);
+  if (addBtn) addBtn.addEventListener('click', function(){ addSkuRow(); });
+
   const dispEl = document.getElementById('f-order-id-display');
   if (dispEl) dispEl.textContent = 'Order No: DISP-' + Date.now().toString().slice(-6);
+
+  // Re-init when view-new-request shown (for fresh order ID)
   const skuList = document.getElementById('sku-list');
   if (skuList) { skuList.innerHTML=''; skuCounter=0; addSkuRow(); }
 }
