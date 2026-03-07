@@ -902,35 +902,37 @@ function renderDashboard() {
 
 function renderPending() {
   const tb = document.getElementById('pendingTable');
-  // Sales Head is view-only, no approval actions
   if (VIEW_ONLY.includes(currentRole)) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">👁️</div><p>Your role (${currentRole}) has view-only access. Use the All Requests tab to track everything.</p></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">👁️</div><p>Your role (${currentRole}) has view-only access. Use All Requests to track everything.</p></td></tr>`;
     return;
   }
-  // Dispatch Manager views all but doesn't sit in approval chain (CEO does now)
-  // Roles that see all requests but may also approve
-  if (currentRole === 'Dispatch Manager' && false) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>As ${currentRole}, you don't have a step in the approval chain. Use All Requests to view and edit any dispatch.</p></td></tr>`;
-    return;
-  }
-  // Planner has no approval step either
   if (currentRole === 'Planner') {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → GM → PM → QC → Finance → Dispatch. Track in All Requests.</p></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → GM → PM → QC → Finance → Dispatch. Track progress in All Requests.</p></td></tr>`;
     return;
   }
-  const myKey = APPROVAL_KEYS[currentRole];
+  // stepKeys in order — Finance appears at index 0 (finance1) and 5 (finance2)
+  const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+
   const mine = allRequests.filter(r => {
     if (r.status === 'approved' || r.status === 'rejected') return false;
+    // What key does this user act on for THIS request?
+    const myKey = getChainKey(currentRole, r);
+    if (!myKey) return false;
     const a = r.approvals?.[myKey];
     if (!a || a.status !== 'pending') return false;
-    const myIdx = APPROVAL_CHAIN.indexOf(currentRole);
-    for (let i = 0; i < myIdx; i++) {
-      const prevKey = APPROVAL_KEYS[APPROVAL_CHAIN[i]];
-      if (r.approvals?.[prevKey]?.status !== 'approved') return false;
+    // All prior steps must be approved
+    const myStepIdx = STEP_KEYS.indexOf(myKey);
+    if (myStepIdx < 0) return false;
+    for (let i = 0; i < myStepIdx; i++) {
+      if (r.approvals?.[STEP_KEYS[i]]?.status !== 'approved') return false;
     }
     return true;
   });
-  if (!mine.length) { tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>No pending approvals for your role right now.</p></td></tr>`; return; }
+
+  if (!mine.length) {
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>No pending approvals for your role right now.</p></td></tr>`;
+    return;
+  }
   tb.innerHTML = mine.map(r => `
     <tr>
       <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
@@ -1028,10 +1030,9 @@ async function submitRequest() {
     if(product==='Basa'&&isFillet&&!row.querySelector('.sku-subspec').value){
       toast('Select Sub Spec for Basa Fillet in SKU '+(i+1),true); return;
     }
-    // Unit validation
+    // Units: Kg and Cases allowed together (1 Case = 10Kg conversion applied)
     const sUnit=row.querySelector('.sku-stocks-unit').value;
     const stocksVal=parseFloat(row.querySelector('.sku-stocks').value)||0;
-    if(stocksVal>0 && sUnit!==qu){toast('Unit mismatch in SKU '+(i+1)+': Qty is '+qu+' but Stocks is '+sUnit,true);return;}
     const pkgTypeSel=row.querySelector('.sku-pkg-type').value;
     const pkgType=pkgTypeSel==='Others'?row.querySelector('.sku-pkg-type-others').value.trim():pkgTypeSel;
     const prodPlan=row.querySelector('.sku-prod-plan').value;
@@ -1042,12 +1043,21 @@ async function submitRequest() {
     // Save stock snapshot to Firestore for next order auto-fill
     if(stocksVal>0){
       const key=(product+'|'+spec).toLowerCase();
-      // Overwrite existing stock entry for this SKU key (upsert by querying first)
-      db.collection('sku_stocks').where('key','==',key).limit(1).get().then(function(snap){
-        const data={key,product,spec,total:stocksVal,unit:sUnit,gl:glWh,cf:cfWh,
-          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),savedBy:currentUser.email};
-        if(snap.empty) db.collection('sku_stocks').add(data);
-        else snap.docs[0].ref.set(data);
+      // Save stock snapshot — store in entered unit + Kg equivalent for cross-unit queries
+      const stockKg = toKg(stocksVal, sUnit);
+      const glKg2   = toKg(glWh, sUnit);
+      const cfKg2   = toKg(cfWh, sUnit);
+      db.collection('sku_stocks').where('key','==',key).get().then(function(snap){
+        const data={
+          key, product, spec,
+          total:stocksVal, unit:sUnit,      // original entered values
+          totalKg:stockKg, glKg:glKg2, cfKg:cfKg2, // always-Kg equivalents
+          gl:glWh, cf:cfWh,
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          savedBy:currentUser.email
+        };
+        if(snap.empty){ db.collection('sku_stocks').add(data); }
+        else{ snap.docs[0].ref.set(data,{merge:false}); }
       });
     }
     skus.push({product, spec,
@@ -1175,12 +1185,11 @@ function openDetail(id) {
     </li>`).join('');
 
   // Show approve/reject only if it's this user's turn
-  // Determine which key this user acts on (Finance appears twice)
+  // Determine which key this user acts on (Finance appears twice in chain)
   const myKey      = getChainKey(currentRole, r);
-  const myChainIdx = getChainIdx(currentRole, r);
-  // Check all previous steps done
-  const stepKeys = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
-  const prevAllDone = myChainIdx <= 0 || stepKeys.slice(0, myChainIdx).every(k => r.approvals?.[k]?.status === 'approved');
+  const STEP_KEYS_OD = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+  const myStepIdx  = myKey ? STEP_KEYS_OD.indexOf(myKey) : -1;
+  const prevAllDone = myStepIdx <= 0 || STEP_KEYS_OD.slice(0, myStepIdx).every(k => r.approvals?.[k]?.status === 'approved');
   const myApprovalObj = myKey ? r.approvals?.[myKey] : null;
   const isMyTurn = myKey && APPROVER_ROLES.includes(currentRole) && myApprovalObj && myApprovalObj.status==='pending' && prevAllDone && r.status==='pending';
 
@@ -1516,6 +1525,17 @@ let skuCounter=0, customProducts=[], customBuyers=[], customSpecs=[];
 const SUBSPEC_OPTS=['N0022','N0023','N0024','N0025','N0056','NWJL','NWL','G2JL','G2L','G3JL','G3L','G4JL','G4L','G5JL','G5L','FTJL','FTL','IJ0','IJ20','IJ30','IJ40','IJ50','IL0','IL20','IL30','IL40','IL50','IR0','IR20','IR30','IR40','IR50','MJ0','MJ20','MJ30','MJ40','MJ50','ML0','ML20','ML30','ML40','ML50','YJ0'];
 const BASE_PRODUCTS=['Rohu','Catla','Murrel','Sea Bass','Basa','Tilapia','Roopchand','Shrimp'];
 // Product-specific spec maps
+// Unit conversion: 1 Case = 10 Kg (for retail vs bulk)
+const KG_PER_CASE = 10;
+function toKg(val, unit)  { return unit==='Cases' ? val*KG_PER_CASE : val; }
+function toCases(val, unit){ return unit==='Kg' ? val/KG_PER_CASE : val; }
+function convertUnit(val, fromUnit, toUnit){
+  if(fromUnit===toUnit) return val;
+  if(fromUnit==='Cases'&&toUnit==='Kg') return val*KG_PER_CASE;
+  if(fromUnit==='Kg'&&toUnit==='Cases') return val/KG_PER_CASE;
+  return val;
+}
+
 const PRODUCT_SPECS = {
   'Rohu':    ['GG','Gutted','Steaks','Bengali Cut'],
   'Catla':   ['GG','Gutted','Steaks','Bengali Cut'],
@@ -1676,8 +1696,11 @@ function addSkuRow(prefill){
 
   // Qty unit → sync stock unit labels + validate match
   div.querySelector('.sku-qty-unit').addEventListener('change',function(){
-    syncUnits(div);
-    calcProdPlan(div);
+    // Re-fetch stock in new unit when unit changes
+    const prod = div.querySelector('.sku-product').value;
+    const spec = div.querySelector('.sku-spec').value;
+    if(prod && spec) { fetchSkuStock(div, prod, spec); return; }
+    syncUnits(div); calcProdPlan(div);
   });
   div.querySelector('.sku-stocks-unit').addEventListener('change',function(){
     syncUnits(div);
@@ -1710,26 +1733,40 @@ function addSkuRow(prefill){
 
 // ── SKU CALCULATION HELPERS ──────────────────────────────────────────
 function calcProdPlan(div){
-  const qty=parseFloat(div.querySelector('.sku-qty-val').value)||0;
-  const stocks=parseFloat(div.querySelector('.sku-stocks').value)||0;
-  const qUnit=div.querySelector('.sku-qty-unit').value;
-  const sUnit=div.querySelector('.sku-stocks-unit').value;
-  const el=div.querySelector('.sku-prod-plan');
-  if(qUnit!==sUnit&&stocks>0){el.value='Unit mismatch!';el.style.color='var(--red)';return;}
-  if(qty===0){el.value='';return;}
-  const plan=qty-stocks;
-  if(plan<=0){el.value='Stocks sufficient';el.style.color='var(--green)';}
-  else{el.value=plan+' '+qUnit+' to produce';el.style.color='var(--blue)';}
+  const qty   = parseFloat(div.querySelector('.sku-qty-val').value)||0;
+  const stocks= parseFloat(div.querySelector('.sku-stocks').value)||0;
+  const qUnit = div.querySelector('.sku-qty-unit').value;
+  const sUnit = div.querySelector('.sku-stocks-unit').value;
+  const el    = div.querySelector('.sku-prod-plan');
+  if(qty===0){ el.value=''; return; }
+
+  // Convert stock to same unit as qty for comparison
+  const stocksInQtyUnit = convertUnit(stocks, sUnit, qUnit);
+  const plan = qty - stocksInQtyUnit;
+
+  // Show conversion note if units differ
+  let convNote = '';
+  if(qUnit !== sUnit && stocks > 0){
+    convNote = ' ('+stocks+' '+sUnit+' → '+stocksInQtyUnit.toFixed(1)+' '+qUnit+')';
+  }
+
+  if(plan <= 0){
+    el.value = 'Stocks sufficient'+convNote;
+    el.style.color = 'var(--green)';
+  } else {
+    el.value = plan.toFixed(plan%1===0?0:1)+' '+qUnit+' to produce'+convNote;
+    el.style.color = 'var(--blue)';
+  }
 }
 
 function syncUnits(div){
-  const qUnit=div.querySelector('.sku-qty-unit').value;
-  const sUnit=div.querySelector('.sku-stocks-unit').value;
-  const errEl=div.querySelector('.sku-unit-error');
-  const mismatch=sUnit&&qUnit!==sUnit&&(parseFloat(div.querySelector('.sku-stocks').value)||0)>0;
-  errEl.style.display=mismatch?'block':'none';
+  const sUnit = div.querySelector('.sku-stocks-unit').value;
   // Sync unit labels on breakup fields
   div.querySelectorAll('.sku-stock-unit-lbl,.sku-stock-unit-lbl2').forEach(l=>l.textContent=sUnit);
+  // Hide the old mismatch error — conversion now handles cross-unit
+  const errEl = div.querySelector('.sku-unit-error');
+  if(errEl) errEl.style.display='none';
+  calcProdPlan(div);
 }
 
 function syncTotalFromBreakup(div){
@@ -1745,41 +1782,79 @@ async function fetchSkuStock(div, product, spec){
   if(!db||!product||!spec) return;
   try {
     const key=(product+'|'+spec).toLowerCase();
-    const snap=await db.collection('dispatch_requests')
-      .where('status','in',['pending','approved']).get();
-    // Also include requests in multi-step approval (not yet final approved/rejected)
-    let allocatedKg=0, allocatedCases=0;
-    snap.forEach(doc=>{
-      const r=doc.data();
+
+    // ── 1. Collect all allocated qty, normalised to Kg ────────────
+    let allocatedKg = 0;
+    const addAllocated = doc => {
+      const r = doc.data();
       if(!r.skus) return;
       r.skus.forEach(s=>{
         if((s.product+'|'+s.spec).toLowerCase()===key){
-          const q=parseFloat(s.qty)||0;
-          if((s.qtyUnit||'Kg')==='Kg') allocatedKg+=q;
-          else allocatedCases+=q;
+          const q = parseFloat(s.qty)||0;
+          // Convert everything to Kg for a common base
+          allocatedKg += toKg(q, s.qtyUnit||'Kg');
         }
       });
-    });
-    // Get most recent stock snapshot from sku_stocks collection
-    const stockSnap=await db.collection('sku_stocks')
-      .where('key','==',key).orderBy('updatedAt','desc').limit(1).get();
-    if(!stockSnap.empty){
-      const sd=stockSnap.docs[0].data();
-      const unit=sd.unit||'Kg';
-      const allocated=unit==='Kg'?allocatedKg:allocatedCases;
-      const remaining=Math.max(0,(sd.total||0)-allocated);
-      const glRemain=Math.max(0,(sd.gl||0)-Math.min(allocated,sd.gl||0));
-      const cfRemain=Math.max(0,remaining-glRemain);
-      div.querySelector('.sku-stocks').value=remaining;
-      div.querySelector('.sku-stocks-unit').value=unit;
-      div.querySelector('.sku-stock-gl').value=glRemain;
-      div.querySelector('.sku-stock-cf').value=cfRemain;
-      syncUnits(div); calcProdPlan(div);
-      const tag=div.querySelector('.sku-stock-tag');
-      tag.textContent='Stock auto-filled ('+allocated+' '+unit+' allocated in open orders)';
-      tag.style.display='inline';
+    };
+    try {
+      const snap = await db.collection('dispatch_requests').where('status','!=','rejected').get();
+      snap.forEach(addAllocated);
+    } catch(e2){
+      for(const st of ['pending','approved']){
+        const s2 = await db.collection('dispatch_requests').where('status','==',st).get();
+        s2.forEach(addAllocated);
+      }
     }
-  } catch(e){ console.log('Stock fetch error:', e.message); }
+
+    // ── 2. Get latest stock snapshot (sorted in JS, no composite index) ──
+    const stockSnap = await db.collection('sku_stocks').where('key','==',key).get();
+    if(stockSnap.empty) return;
+
+    const docs = stockSnap.docs.map(d=>d.data());
+    docs.sort((a,b)=>{
+      const ta = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+      const tb2= b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+      return tb2-ta;
+    });
+    const sd = docs[0];
+    const storedUnit = sd.unit||'Kg';
+
+    // ── 3. Compute remaining (use pre-saved Kg fields if available) ──
+    const storedTotalKg = sd.totalKg!=null ? sd.totalKg : toKg(sd.total||0, storedUnit);
+    const glKg          = sd.glKg   !=null ? sd.glKg    : toKg(sd.gl||0, storedUnit);
+    const cfKg          = sd.cfKg   !=null ? sd.cfKg    : toKg(sd.cf||0, storedUnit);
+    const remainingKg   = Math.max(0, storedTotalKg - allocatedKg);
+
+    // ── 4. Display unit = what planner selected for Qty Required ──
+    const qtyUnit = div.querySelector('.sku-qty-unit').value || storedUnit;
+
+    const remainingDisplay = parseFloat(convertUnit(remainingKg,'Kg',qtyUnit).toFixed(2));
+    const glDisplay = parseFloat(convertUnit(Math.min(glKg, remainingKg),'Kg',qtyUnit).toFixed(2));
+    const cfDisplay = parseFloat(convertUnit(Math.max(0, remainingKg-glKg),'Kg',qtyUnit).toFixed(2));
+
+    // ── 5. Fill form fields ───────────────────────────────────────
+    div.querySelector('.sku-stocks').value      = remainingDisplay;
+    div.querySelector('.sku-stocks-unit').value = qtyUnit;
+    div.querySelector('.sku-stock-gl').value    = glDisplay;
+    div.querySelector('.sku-stock-cf').value    = cfDisplay;
+    syncUnits(div); calcProdPlan(div);
+
+    // ── 6. Info tag ───────────────────────────────────────────────
+    const allocDisplay  = parseFloat(convertUnit(allocatedKg,'Kg',qtyUnit).toFixed(2));
+    const totalDisplay  = parseFloat(convertUnit(storedTotalKg,'Kg',qtyUnit).toFixed(2));
+    let convNote = '';
+    if(storedUnit !== qtyUnit){
+      convNote = ' (stored as '+sd.total+' '+storedUnit+', converted @ 1 Case='+KG_PER_CASE+'Kg)';
+    }
+    const tag = div.querySelector('.sku-stock-tag');
+    tag.textContent = 'ℹ️ '+totalDisplay+' '+qtyUnit+' total | '
+      +allocDisplay+' '+qtyUnit+' allocated | '
+      +remainingDisplay+' '+qtyUnit+' available'+convNote;
+    tag.style.display = 'inline';
+    tag.style.background = remainingDisplay > 0 ? 'var(--glt)' : 'var(--rlt)';
+    tag.style.color      = remainingDisplay > 0 ? 'var(--green)' : 'var(--red)';
+
+  } catch(e){ console.warn('Stock fetch error:', e.message); }
 }
 
 function renumberSkus(){document.querySelectorAll('.sku-row').forEach((r,i)=>r.querySelector('.sku-num').textContent='SKU #'+(i+1));}
