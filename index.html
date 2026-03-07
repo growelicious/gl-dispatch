@@ -2120,20 +2120,33 @@ function initFormListeners() {
       }
     });
   }
+}
 
+// ── NEW REQUEST VIEW INITIALIZATION ──────────────────────────────────
+// This function is called every time the "New Dispatch Request" view is shown
+// to ensure the Add SKU button works and the form is properly initialized
+function initNewRequestView() {
+  // Attach Add SKU button event listener
   const addBtn = document.getElementById('addSkuBtn');
-  if (addBtn) addBtn.addEventListener('click', function(){ addSkuRow(); });
+  if (addBtn) {
+    // Remove any existing listener to prevent duplicates
+    const newBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newBtn, addBtn);
+    newBtn.addEventListener('click', function(){ addSkuRow(); });
+  }
 
+  // Generate fresh order ID
   const dispEl = document.getElementById('f-order-id-display');
   if (dispEl) dispEl.textContent = 'Order No: DISP-' + Date.now().toString().slice(-6);
 
-  // Re-init when view-new-request shown (for fresh order ID)
+  // Initialize SKU list with one empty row
   const skuList = document.getElementById('sku-list');
-  if (skuList) { skuList.innerHTML=''; skuCounter=0; addSkuRow(); }
+  if (skuList && skuList.children.length === 0) {
+    skuList.innerHTML = '';
+    skuCounter = 0;
+    addSkuRow();
+  }
 }
-
-function showView(name) {
-  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
   var el = document.getElementById('view-' + name);
   if (el) el.classList.add('active');
   document.querySelectorAll('.si').forEach(function(i){ i.classList.remove('active'); });
