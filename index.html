@@ -726,10 +726,25 @@ const ROLE_MAP = (function(){
   return m;
 })();
 
-// NEW Approval chain: Finance Review → CEO → PM → GM → QC
-// Finance sees it first (adds commercial terms), CEO approves, then ops chain
-const APPROVAL_CHAIN = ['Finance Approver','CEO','Production Manager','General Manager','QC Manager'];
-const APPROVAL_KEYS  = { 'Finance Approver':'finance', 'CEO':'ceo', 'Production Manager':'pm', 'General Manager':'gm', 'QC Manager':'qc' };
+// Approval chain: Finance(1) → CEO → GM → PM → QC → Finance(2) → Dispatch Manager
+const APPROVAL_CHAIN  = ['Finance Approver','CEO','General Manager','Production Manager','QC Manager','Finance Approver','Dispatch Manager'];
+const APPROVAL_KEYS   = { 'Finance Approver':'finance1', 'CEO':'ceo', 'General Manager':'gm', 'Production Manager':'pm', 'QC Manager':'qc', 'Dispatch Manager':'dispatch' };
+// Finance appears twice — step 1 key = finance1, step 6 key = finance2
+// getChainKey returns the right key based on what step this person is acting on
+function getChainKey(role, r) {
+  if (role !== 'Finance Approver') return APPROVAL_KEYS[role] || null;
+  // Finance step 1 if finance1 is still pending, step 2 if finance1 done
+  const f1 = r && r.approvals && r.approvals.finance1 ? r.approvals.finance1.status : 'pending';
+  return f1 === 'approved' ? 'finance2' : 'finance1';
+}
+// Step index for chain ordering (Finance: 0 or 5)
+function getChainIdx(role, r) {
+  if (role === 'Finance Approver') return getChainKey(role, r) === 'finance2' ? 5 : 0;
+  const map = { 'CEO':1, 'General Manager':2, 'Production Manager':3, 'QC Manager':4, 'Dispatch Manager':6 };
+  return map[role] !== undefined ? map[role] : -1;
+}
+// All roles that sit in the approval chain
+const APPROVER_ROLES  = ['Finance Approver','CEO','General Manager','Production Manager','QC Manager','Dispatch Manager'];
 
 // Roles that can CREATE new dispatch requests
 const CAN_CREATE  = ['Planner', 'Dispatch Manager', 'CEO'];
@@ -893,14 +908,14 @@ function renderPending() {
     return;
   }
   // Dispatch Manager views all but doesn't sit in approval chain (CEO does now)
-  // Dispatch Manager can view all but isn't in approval chain
-  if (currentRole === 'Dispatch Manager') {
+  // Roles that see all requests but may also approve
+  if (currentRole === 'Dispatch Manager' && false) {
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>As ${currentRole}, you don't have a step in the approval chain. Use All Requests to view and edit any dispatch.</p></td></tr>`;
     return;
   }
   // Planner has no approval step either
   if (currentRole === 'Planner') {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → PM → GM → QC. Track progress in All Requests.</p></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → GM → PM → QC → Finance → Dispatch. Track in All Requests.</p></td></tr>`;
     return;
   }
   const myKey = APPROVAL_KEYS[currentRole];
@@ -1019,24 +1034,27 @@ async function submitRequest() {
     if(stocksVal>0 && sUnit!==qu){toast('Unit mismatch in SKU '+(i+1)+': Qty is '+qu+' but Stocks is '+sUnit,true);return;}
     const pkgTypeSel=row.querySelector('.sku-pkg-type').value;
     const pkgType=pkgTypeSel==='Others'?row.querySelector('.sku-pkg-type-others').value.trim():pkgTypeSel;
-    const pkgSel=row.querySelector('.sku-packaging').value;
-    const pkg=pkgSel==='Others'?row.querySelector('.sku-packaging-others').value.trim():pkgSel;
     const prodPlan=row.querySelector('.sku-prod-plan').value;
     const price=row.querySelector('.sku-price').value||'';
     const glWh=parseFloat(row.querySelector('.sku-stock-gl').value)||0;
     const cfWh=parseFloat(row.querySelector('.sku-stock-cf').value)||0;
     if(pkgTypeSel==='Others') saveCustomOption('pkgtype', pkgType);
-    if(pkgSel==='Others')     saveCustomOption('packaging', pkg);
     // Save stock snapshot to Firestore for next order auto-fill
     if(stocksVal>0){
       const key=(product+'|'+spec).toLowerCase();
-      db.collection('sku_stocks').add({key,product,spec,total:stocksVal,unit:sUnit,gl:glWh,cf:cfWh,updatedAt:firebase.firestore.FieldValue.serverTimestamp(),savedBy:currentUser.email});
+      // Overwrite existing stock entry for this SKU key (upsert by querying first)
+      db.collection('sku_stocks').where('key','==',key).limit(1).get().then(function(snap){
+        const data={key,product,spec,total:stocksVal,unit:sUnit,gl:glWh,cf:cfWh,
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),savedBy:currentUser.email};
+        if(snap.empty) db.collection('sku_stocks').add(data);
+        else snap.docs[0].ref.set(data);
+      });
     }
     skus.push({product, spec,
       subspec:  (()=>{ const sel=row.querySelector('.sku-subspec').value; const oth=row.querySelector('.sku-subspec-others')?.value.trim(); return sel==='Others'?oth:sel; })(),
       piecesKg: row.querySelector('.sku-pieces').value,
       glaze:    row.querySelector('.sku-glaze').value,
-      pkgType, pkgSpec:isFillet?row.querySelector('.sku-pkg-spec').value:'', packaging:pkg,
+      pkgType, pkgSpec:isFillet?row.querySelector('.sku-pkg-spec').value:'',
       price, qty:qv, qtyUnit:qu,
       stocks:stocksVal, stockUnit:sUnit, glWh, cfWh, productionPlan:prodPlan});
   }
@@ -1054,15 +1072,17 @@ async function submitRequest() {
       product:skus[0].product, spec:skus[0].spec,
       location:document.getElementById('f-location').value,
       notes:document.getElementById('f-notes').value,
-      status:'pending', stage:'Awaiting Finance Review (Mohan Krishna)', notifyFinance:true,
+      status:'pending', stage:'Awaiting Finance Review — Step 1 (Mohan Krishna)', notifyFinance:true,
       submittedBy:currentUser.email, submittedByName:currentRole,
       createdAt:firebase.firestore.FieldValue.serverTimestamp(),
       approvals:{
-        finance:{status:'pending',remark:'',time:null,paymentTerms:'',outstanding:'',productionCost:'',pl:''},
-        ceo:    {status:'pending',remark:'',time:null},
-        pm:     {status:'pending',remark:'',time:null},
-        gm:     {status:'pending',remark:'',time:null},
-        qc:     {status:'pending',remark:'',time:null},
+        finance1:{status:'pending',remark:'',time:null,paymentTerms:'',outstanding:'',outstandingNote:'',productionCost:'',pl:''},
+        ceo:     {status:'pending',remark:'',time:null},
+        gm:      {status:'pending',remark:'',time:null},
+        pm:      {status:'pending',remark:'',time:null},
+        qc:      {status:'pending',remark:'',time:null},
+        finance2:{status:'pending',remark:'',time:null},
+        dispatch:{status:'pending',remark:'',time:null},
       }
     });
     ['f-payment-others','f-buyer-others','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -1091,8 +1111,8 @@ function openDetail(id) {
   document.getElementById('d-subtitle').innerHTML = `${r.orderType||''} &nbsp;·&nbsp; ${r.dispatchDate||''} &nbsp;·&nbsp; ${pill(r.status)}`;
 
   // Approval track
-  const trackLabels = ['Finance','CEO','PM','GM','QC'];
-  const trackKeys   = ['finance','ceo','pm','gm','qc'];
+  const trackLabels = ['Finance 1','CEO','GM','PM','QC','Finance 2','Dispatch'];
+  const trackKeys   = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
   document.getElementById('d-track').innerHTML = trackKeys.map((k,i) => {
     const a = r.approvals?.[k];
     const st = a?.status||'pending';
@@ -1128,7 +1148,6 @@ function openDetail(id) {
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Glaze</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pkg Type</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Pkg Spec</th>
-        <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Material</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Stocks</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">Price</th>
         <th style="padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:10px;color:var(--muted)">GL Wh</th>
@@ -1143,9 +1162,10 @@ function openDetail(id) {
   const tl = [
     { who: r.submittedBy||'—', role:'Dispatch Manager', status:'done', note:'Request submitted', time: fmtTime(r.createdAt) }
   ];
-  ['finance','ceo','pm','gm','qc'].forEach((k,i) => {
+  ['finance1','ceo','gm','pm','qc','finance2','dispatch'].forEach((k,i) => {
     const a = r.approvals?.[k]||{};
-    tl.push({ who: APPROVAL_CHAIN[i], role: APPROVAL_CHAIN[i], status: a.status||'pending', note: a.remark||null, time: fmtTime(a.time) });
+    const tlLabels=['Finance (Mohan)','CEO (Sajith)','GM (Siva)','PM (Praveen)','QC (Gopinath)','Finance Final (Mohan)','Dispatch (Harish)'];
+    tl.push({ who: tlLabels[i]||APPROVAL_CHAIN[i], status: a.status||'pending', note: a.remark||null, time: fmtTime(a.time) });
   });
   document.getElementById('d-timeline').innerHTML = tl.map(t => `
     <li class="${t.status==='approved'?'done': t.status==='rejected'?'rejected':'pending'}">
@@ -1155,31 +1175,38 @@ function openDetail(id) {
     </li>`).join('');
 
   // Show approve/reject only if it's this user's turn
-  const myKey = APPROVAL_KEYS[currentRole];
-  const myApproval = r.approvals?.[myKey];
-  const myIdx = APPROVAL_CHAIN.indexOf(currentRole);
-  const prevAllDone = myIdx <= 0 || APPROVAL_CHAIN.slice(0, myIdx).every(role => r.approvals?.[APPROVAL_KEYS[role]]?.status === 'approved');
-  const isApprover = APPROVAL_CHAIN.includes(currentRole);
-  const myApprovalObj = r.approvals?.[myKey];
-  const isMyTurn = isApprover && myApprovalObj && myApprovalObj.status==='pending' && prevAllDone && r.status==='pending';
+  // Determine which key this user acts on (Finance appears twice)
+  const myKey      = getChainKey(currentRole, r);
+  const myChainIdx = getChainIdx(currentRole, r);
+  // Check all previous steps done
+  const stepKeys = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+  const prevAllDone = myChainIdx <= 0 || stepKeys.slice(0, myChainIdx).every(k => r.approvals?.[k]?.status === 'approved');
+  const myApprovalObj = myKey ? r.approvals?.[myKey] : null;
+  const isMyTurn = myKey && APPROVER_ROLES.includes(currentRole) && myApprovalObj && myApprovalObj.status==='pending' && prevAllDone && r.status==='pending';
 
   const finPanel = document.getElementById('d-finance-panel');
   const actPanel = document.getElementById('d-actions');
 
   if (currentRole==='Finance Approver' && isMyTurn) {
+    // Finance review panel (step 1 or step 2)
     finPanel.style.display = 'block';
     actPanel.style.display = 'none';
-    const fa = r.approvals?.finance || {};
-    document.getElementById('d-fin-payment-text').value    = fa.paymentTerms || r.payment || '';
-    document.getElementById('d-fin-outstanding').value     = fa.outstanding || '';
-    document.getElementById('d-fin-outstanding-note').value= fa.outstandingNote || '';
-    document.getElementById('d-fin-prod-cost').value       = fa.productionCost || '';
-    document.getElementById('d-fin-pl').value              = fa.pl || '';
-    document.getElementById('d-fin-remark').value          = fa.remark || '';
+    const fa = r.approvals?.[myKey] || {};
+    const isFinStep2 = myKey === 'finance2';
+    document.getElementById('d-fin-submit-btn').textContent = isFinStep2 ? '✓ Final Clearance →' : 'Submit to CEO →';
+    document.querySelector('#d-finance-panel .fin-panel-title').textContent = isFinStep2
+      ? '📊 Finance Final Clearance — Step 6'
+      : '📊 Finance Review — Step 1 Commercial Details';
+    document.getElementById('d-fin-payment-text').value     = fa.paymentTerms || r.payment || '';
+    document.getElementById('d-fin-outstanding').value      = fa.outstanding || (isFinStep2 ? (r.approvals?.finance1?.outstanding||'') : '');
+    document.getElementById('d-fin-outstanding-note').value = fa.outstandingNote || '';
+    document.getElementById('d-fin-prod-cost').value        = fa.productionCost || '';
+    document.getElementById('d-fin-pl').value               = fa.pl || '';
+    document.getElementById('d-fin-remark').value           = fa.remark || '';
     const revenue = (r.skus||[]).reduce(function(sum,s){return sum+(parseFloat(s.price)||0)*(parseFloat(s.qty)||0);},0);
     const plAuto = document.getElementById('d-fin-pl-auto');
     if (revenue > 0) {
-      plAuto.textContent = 'Order revenue (price x qty): ₹' + revenue.toLocaleString('en-IN');
+      plAuto.textContent = 'Order revenue (price×qty): ₹' + revenue.toLocaleString('en-IN');
       if (!fa.pl) document.getElementById('d-fin-pl').value = revenue.toFixed(2);
     }
     document.getElementById('d-fin-prod-cost').oninput = function(){
@@ -1192,18 +1219,18 @@ function openDetail(id) {
     document.getElementById('d-remark').value = '';
   }
 
-  // Finance summary — show after finance has reviewed
+  // Finance Step 1 summary — visible to everyone once finance1 reviewed
   const finSummary = document.getElementById('d-finance-summary');
   if (finSummary) {
-    const fa = r.approvals?.finance || {};
+    const fa = r.approvals?.finance1 || {};
     if (fa.status==='approved' && (fa.paymentTerms||fa.outstanding||fa.pl)) {
       finSummary.style.display = 'block';
       const plNum = parseFloat(fa.pl)||0;
       finSummary.innerHTML =
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--green);margin-bottom:10px">Finance Review Summary</div>'+
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px">💼 Finance Step 1 Review</div>'+
         '<div class="info-grid" style="grid-template-columns:1fr 1fr;gap:8px">'+
         (fa.paymentTerms?'<div class="info-item"><div class="ilabel">Payment Terms</div><div class="ivalue">'+fa.paymentTerms+'</div></div>':'')+
-        (fa.outstanding?'<div class="info-item"><div class="ilabel">Outstanding (₹)</div><div class="ivalue" style="color:var(--red);font-weight:700">₹'+parseFloat(fa.outstanding).toLocaleString('en-IN')+'</div></div>':'')+
+        (fa.outstanding?'<div class="info-item"><div class="ilabel">Customer Outstanding</div><div class="ivalue" style="color:var(--red);font-weight:700">₹'+parseFloat(fa.outstanding).toLocaleString('en-IN')+'</div></div>':'')+
         (fa.productionCost?'<div class="info-item"><div class="ilabel">Production Cost</div><div class="ivalue">₹'+parseFloat(fa.productionCost).toLocaleString('en-IN')+'</div></div>':'')+
         (fa.pl?'<div class="info-item"><div class="ilabel">Trade P&amp;L</div><div class="ivalue" style="font-weight:700;color:'+(plNum>=0?'var(--green)':'var(--red)')+'">₹'+plNum.toLocaleString('en-IN')+'</div></div>':'')+
         (fa.outstandingNote?'<div class="info-item" style="grid-column:span 2"><div class="ilabel">Outstanding Note</div><div class="ivalue">'+fa.outstandingNote+'</div></div>':'')+
@@ -1227,118 +1254,109 @@ function closeDetail(e) {
 async function financeSubmit() {
   const r = allRequests.find(x => x.id === activeReqId);
   if (!r) return;
-  const payTerms  = document.getElementById('d-fin-payment-text').value.trim();
+  const finKey  = getChainKey('Finance Approver', r);
+  const isStep2 = finKey === 'finance2';
+  const payTerms    = document.getElementById('d-fin-payment-text').value.trim();
   const outstanding = document.getElementById('d-fin-outstanding').value;
-  const outNote   = document.getElementById('d-fin-outstanding-note').value.trim();
-  const prodCost  = document.getElementById('d-fin-prod-cost').value;
-  const pl        = document.getElementById('d-fin-pl').value;
-  const remark    = document.getElementById('d-fin-remark').value.trim();
+  const outNote     = document.getElementById('d-fin-outstanding-note').value.trim();
+  const prodCost    = document.getElementById('d-fin-prod-cost').value;
+  const pl          = document.getElementById('d-fin-pl').value;
+  const remark      = document.getElementById('d-fin-remark').value.trim();
   const btn = document.getElementById('d-fin-submit-btn');
-  btn.innerHTML = '<span class="loading-spinner"></span> Submitting...'; btn.disabled = true;
+  btn.disabled = true; btn.textContent = 'Submitting...';
+  const nextStage = isStep2
+    ? 'Awaiting Dispatch Manager (Harish) Confirmation'
+    : 'Awaiting CEO (Sajith) Approval';
   try {
-    await db.collection('dispatch_requests').doc(activeReqId).update({
-      'approvals.finance.status':         'approved',
-      'approvals.finance.time':           firebase.firestore.FieldValue.serverTimestamp(),
-      'approvals.finance.remark':         remark || 'Finance reviewed',
-      'approvals.finance.paymentTerms':   payTerms,
-      'approvals.finance.outstanding':    outstanding,
-      'approvals.finance.outstandingNote':outNote,
-      'approvals.finance.productionCost': prodCost,
-      'approvals.finance.pl':             pl,
-      stage: 'Awaiting CEO (Sajith) Approval',
-    });
+    const update = {
+      ['approvals.'+finKey+'.status']:           'approved',
+      ['approvals.'+finKey+'.time']:             firebase.firestore.FieldValue.serverTimestamp(),
+      ['approvals.'+finKey+'.remark']:           remark || (isStep2 ? 'Finance final clearance' : 'Finance Step 1 reviewed'),
+      ['approvals.'+finKey+'.paymentTerms']:     payTerms,
+      ['approvals.'+finKey+'.outstanding']:      outstanding,
+      ['approvals.'+finKey+'.outstandingNote']:  outNote,
+      ['approvals.'+finKey+'.productionCost']:   prodCost,
+      ['approvals.'+finKey+'.pl']:               pl,
+      stage: nextStage,
+    };
+    await db.collection('dispatch_requests').doc(activeReqId).update(update);
     document.getElementById('detailOverlay').classList.remove('open');
-    toast('✓ Finance review submitted to CEO (Sajith)');
+    toast('✓ Submitted — ' + nextStage);
   } catch(e) { toast('Error: '+e.message, true); }
-  btn.innerHTML = 'Submit to CEO →'; btn.disabled = false;
+  btn.disabled = false; btn.textContent = isStep2 ? '✓ Final Clearance →' : 'Submit to CEO →';
 }
 
 async function financeReject() {
+  const r = allRequests.find(x => x.id === activeReqId);
+  const finKey = getChainKey('Finance Approver', r);
   const remark = document.getElementById('d-fin-remark').value.trim();
   if (!remark) { toast('Please add a reason / query before rejecting', true); return; }
   const btn = document.getElementById('d-fin-reject-btn');
-  btn.innerHTML = '<span class="loading-spinner"></span>'; btn.disabled = true;
+  btn.disabled = true;
   try {
     await db.collection('dispatch_requests').doc(activeReqId).update({
-      'approvals.finance.status': 'rejected',
-      'approvals.finance.time':   firebase.firestore.FieldValue.serverTimestamp(),
-      'approvals.finance.remark': remark,
+      ['approvals.'+finKey+'.status']: 'rejected',
+      ['approvals.'+finKey+'.time']:   firebase.firestore.FieldValue.serverTimestamp(),
+      ['approvals.'+finKey+'.remark']: remark,
       status: 'rejected',
-      stage:  'Rejected / Query by Finance (Mohan Krishna) — ' + remark.slice(0,60),
+      stage: 'Rejected / Query by Finance (Mohan Krishna) — '+remark.slice(0,60),
     });
     document.getElementById('detailOverlay').classList.remove('open');
-    toast('Request returned with query. Planner will be notified.', true);
+    toast('Request returned with query.', true);
   } catch(e) { toast('Error: '+e.message, true); }
-  btn.innerHTML = '✗ Reject / Query'; btn.disabled = false;
+  btn.disabled = false;
 }
 
 async function doApprove() {
   const r = allRequests.find(x => x.id === activeReqId);
-  const myKey = APPROVAL_KEYS[currentRole];
+  const myKey = getChainKey(currentRole, r);
+  if (!myKey) return;
   const remark = document.getElementById('d-remark').value || 'Approved';
   const btn = document.getElementById('d-approve-btn');
-  btn.innerHTML = '<span class="loading-spinner"></span>';
-  btn.disabled = true;
-
+  btn.innerHTML = '<span class="loading-spinner"></span>'; btn.disabled = true;
+  const NEXT_STAGE = {
+    'ceo':      'Awaiting GM (Siva S B) Approval',
+    'gm':       'Awaiting PM (Praveen) Sign-off',
+    'pm':       'Awaiting QC (Gopinath) Clearance',
+    'qc':       'Awaiting Finance Final Clearance — Step 6 (Mohan Krishna)',
+    'dispatch': '✅ Fully Approved — Loading Cleared',
+  };
   try {
-    const myIdx = APPROVAL_CHAIN.indexOf(currentRole);
-    const nextRole = APPROVAL_CHAIN[myIdx + 1];
-    const allApproved = myIdx === APPROVAL_CHAIN.length - 1;
-
+    const isLast = myKey === 'dispatch';
     const update = {
-      [`approvals.${myKey}.status`]: 'approved',
-      [`approvals.${myKey}.remark`]: remark,
-      [`approvals.${myKey}.time`]:   firebase.firestore.FieldValue.serverTimestamp(),
+      ['approvals.'+myKey+'.status']: 'approved',
+      ['approvals.'+myKey+'.remark']: remark,
+      ['approvals.'+myKey+'.time']:   firebase.firestore.FieldValue.serverTimestamp(),
+      stage: NEXT_STAGE[myKey] || 'Next step pending',
     };
-
-    const STAGE_LABELS = {
-      'Finance Approver':   'Awaiting CEO (Sajith) Approval',
-      'CEO':                'Awaiting PM (Praveen) Sign-off',
-      'Production Manager': 'Awaiting GM (Siva) Approval',
-      'General Manager':    'Awaiting QC (Gopinath) Clearance',
-      'QC Manager':         '✅ All Approved — Loading Cleared',
-    };
-    if (allApproved) {
-      update.status = 'approved';
-      update.stage  = '✅ All Approved — Loading Cleared';
-    } else {
-      update.stage = STAGE_LABELS[nextRole] || `Awaiting ${nextRole}`;
-    }
-
+    if (isLast) update.status = 'approved';
     await db.collection('dispatch_requests').doc(activeReqId).update(update);
     document.getElementById('detailOverlay').classList.remove('open');
-    toast(`✓ Approved — ${r.dispatchId || activeReqId}`);
-  } catch(e) {
-    toast('Error: ' + e.message, true);
-  }
-  btn.innerHTML = '✓ Approve';
-  btn.disabled = false;
+    toast('✓ Approved — ' + (r.dispatchId || activeReqId));
+  } catch(e) { toast('Error: '+e.message, true); }
+  btn.innerHTML = '✓ Approve'; btn.disabled = false;
 }
 
 async function doReject() {
   const r = allRequests.find(x => x.id === activeReqId);
-  const myKey = APPROVAL_KEYS[currentRole];
+  const myKey = getChainKey(currentRole, r);
+  if (!myKey) return;
   const remark = document.getElementById('d-remark').value;
   if (!remark) { toast('Please add a reason for rejection', true); return; }
   const btn = document.getElementById('d-reject-btn');
-  btn.innerHTML = '<span class="loading-spinner"></span>';
-  btn.disabled = true;
-
+  btn.innerHTML = '<span class="loading-spinner"></span>'; btn.disabled = true;
   try {
     await db.collection('dispatch_requests').doc(activeReqId).update({
-      [`approvals.${myKey}.status`]: 'rejected',
-      [`approvals.${myKey}.remark`]: remark,
-      [`approvals.${myKey}.time`]:   firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'rejected',
-      stage:  `Rejected by ${currentRole} (${currentUser.email})`,
+      ['approvals.'+myKey+'.status']: 'rejected',
+      ['approvals.'+myKey+'.remark']: remark,
+      ['approvals.'+myKey+'.time']:   firebase.firestore.FieldValue.serverTimestamp(),
+      status:  'rejected',
+      stage:   'Rejected by '+currentRole+' — '+remark.slice(0,60),
     });
     document.getElementById('detailOverlay').classList.remove('open');
-    toast(`✗ Rejected — ${r.dispatchId || activeReqId}`, true);
-  } catch(e) {
-    toast('Error: ' + e.message, true);
-  }
-  btn.innerHTML = '✗ Reject';
-  btn.disabled = false;
+    toast('✗ Rejected — '+(r.dispatchId||activeReqId), true);
+  } catch(e) { toast('Error: '+e.message, true); }
+  btn.innerHTML = '✗ Reject'; btn.disabled = false;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1509,7 +1527,6 @@ const PRODUCT_SPECS = {
   'Basa':    ['GG','Gutted','Fillet','Cubes','Fingers','Chunks','Steaks','Loin'],
 };
 const BASE_SPECS=['GG','Gutted','Steaks','Bengali Cut','Fillet','Skin on Fillet','Loin','Chunks','Fingers','Cubes'];
-const PACKAGING_TYPES=['IQF Bulk','IQF Retail','Block Frozen','Vacuum Pack','MAP Pack','Loose'];
 const PKG_TYPES=['Vacuum Packed','With Rider','Without Rider','Individual Packaging'];
 function getProdOpts(ex){return[...new Set([...BASE_PRODUCTS,...(ex||[])])].map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';}
 function getSpecOpts2(extra, product) {
@@ -1529,7 +1546,6 @@ function addSkuRow(prefill){
   const idx=skuCounter, div=document.createElement('div');
   div.className='sku-row'; div.setAttribute('data-idx',idx);
   const pkgTypeOpts=PKG_TYPES.map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';
-  const pkgOpts=PACKAGING_TYPES.map(p=>'<option>'+p+'</option>').join('')+'<option>Others</option>';
   div.innerHTML=
     '<div class="sku-num">SKU #'+idx+'</div>'+
     '<button type="button" class="sku-remove" title="Remove SKU">x</button>'+
@@ -1611,10 +1627,6 @@ function addSkuRow(prefill){
           '<input type="text" class="sku-pkg-type-others" placeholder="Specify..."></div>'+
         '<div class="field"><label>Packaging Spec</label>'+
           '<input type="text" class="sku-pkg-spec" placeholder="e.g. 2kg pack, 500g pack"></div>'+
-        '<div class="field"><label>Packaging Material</label>'+
-          '<select class="sku-packaging"><option value="">- Select -</option>'+pkgOpts+'</select></div>'+
-        '<div class="field sku-packaging-others-wrap" style="display:none"><label>Material (Others)</label>'+
-          '<input type="text" class="sku-packaging-others" placeholder="Enter packaging material"></div>'+
       '</div>'+
     '</div>';
 
@@ -1660,9 +1672,6 @@ function addSkuRow(prefill){
   });
   div.querySelector('.sku-pkg-type').addEventListener('change',function(){
     div.querySelector('.sku-pkg-type-others-wrap').style.display=this.value==='Others'?'block':'none';
-  });
-  div.querySelector('.sku-packaging').addEventListener('change',function(){
-    div.querySelector('.sku-packaging-others-wrap').style.display=this.value==='Others'?'block':'none';
   });
 
   // Qty unit → sync stock unit labels + validate match
@@ -1738,6 +1747,7 @@ async function fetchSkuStock(div, product, spec){
     const key=(product+'|'+spec).toLowerCase();
     const snap=await db.collection('dispatch_requests')
       .where('status','in',['pending','approved']).get();
+    // Also include requests in multi-step approval (not yet final approved/rejected)
     let allocatedKg=0, allocatedCases=0;
     snap.forEach(doc=>{
       const r=doc.data();
