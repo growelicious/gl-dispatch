@@ -2147,12 +2147,20 @@ function initNewRequestView() {
     addSkuRow();
   }
 }
+
+function showView(name) {
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
   var el = document.getElementById('view-' + name);
   if (el) el.classList.add('active');
   document.querySelectorAll('.si').forEach(function(i){ i.classList.remove('active'); });
   var navMap = {'dashboard':'nav-dashboard','new-request':'nav-new','pending':'nav-pending','all-requests':'nav-all','qc-checks':'nav-qc'};
   var nav = document.getElementById(navMap[name]);
   if (nav) nav.classList.add('active');
+  
+  // Initialize New Request view when it's shown
+  if (name === 'new-request') {
+    initNewRequestView();
+  }
 }
 
 function toast(msg, err) {
