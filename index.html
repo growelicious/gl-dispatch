@@ -1025,10 +1025,20 @@ async function submitRequest() {
     // Save custom subspec if Others
     const rawSub=row.querySelector('.sku-subspec').value;
     if(rawSub==='Others'){ const os=row.querySelector('.sku-subspec-others')?.value.trim(); if(os) saveCustomOption('subspec',os); }
-    const isFillet = ss==='Fillet'||ss==='Skin on Fillet';
-    // Basa + Fillet requires sub-spec
-    if(product==='Basa'&&isFillet&&!row.querySelector('.sku-subspec').value){
-      toast('Select Sub Spec for Basa Fillet in SKU '+(i+1),true); return;
+    const isFillet      = ss==='Fillet'||ss==='Skin on Fillet';
+    const isBasaFillet  = product==='Basa' && isFillet;
+    // Basa Fillet: Sub Spec is required
+    if(isBasaFillet && !row.querySelector('.sku-subspec').value){
+      toast('SKU '+(i+1)+': Sub Spec is required for Basa Fillet', true); return;
+    }
+    // Other fillet specs: Pieces/Kg and Glaze are required
+    if(isFillet && !isBasaFillet){
+      if(!row.querySelector('.sku-pieces').value.trim()){
+        toast('SKU '+(i+1)+': Pieces / Kg is required for '+product+' '+ss, true); return;
+      }
+      if(!row.querySelector('.sku-glaze').value.trim()){
+        toast('SKU '+(i+1)+': Glaze % is required for '+product+' '+ss, true); return;
+      }
     }
     // Units: Kg and Cases allowed together (1 Case = 10Kg conversion applied)
     const sUnit=row.querySelector('.sku-stocks-unit').value;
@@ -1042,16 +1052,22 @@ async function submitRequest() {
     if(pkgTypeSel==='Others') saveCustomOption('pkgtype', pkgType);
     // Save stock snapshot to Firestore for next order auto-fill
     if(stocksVal>0){
-      const key=(product+'|'+spec).toLowerCase();
-      // Save stock snapshot — store in entered unit + Kg equivalent for cross-unit queries
+      // Full SKU key: product|spec|subspec|piecesKg|glaze|pkgType|pkgSpec
+      const subsVal = (()=>{ const sel=row.querySelector('.sku-subspec').value; const oth=row.querySelector('.sku-subspec-others')?.value.trim(); return sel==='Others'?oth:sel; })();
+      const pcsVal  = row.querySelector('.sku-pieces').value;
+      const glzVal  = row.querySelector('.sku-glaze').value;
+      const pktVal  = pkgType;
+      const pksVal  = isFillet ? row.querySelector('.sku-pkg-spec').value : '';
+      const skuKey  = buildSkuKey(product, spec, subsVal, pcsVal, glzVal);
       const stockKg = toKg(stocksVal, sUnit);
       const glKg2   = toKg(glWh, sUnit);
       const cfKg2   = toKg(cfWh, sUnit);
-      db.collection('sku_stocks').where('key','==',key).get().then(function(snap){
+      db.collection('sku_stocks').where('key','==',skuKey).get().then(function(snap){
         const data={
-          key, product, spec,
-          total:stocksVal, unit:sUnit,      // original entered values
-          totalKg:stockKg, glKg:glKg2, cfKg:cfKg2, // always-Kg equivalents
+          key:skuKey, product, spec,
+          subspec:subsVal, piecesKg:pcsVal, glaze:glzVal, pkgType:pktVal, pkgSpec:pksVal,
+          total:stocksVal, unit:sUnit,
+          totalKg:stockKg, glKg:glKg2, cfKg:cfKg2,
           gl:glWh, cf:cfWh,
           updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
           savedBy:currentUser.email
@@ -1561,6 +1577,34 @@ function getSpecOpts2(extra, product) {
   return base.map(function(s){ return '<option>'+s+'</option>'; }).join('') + '<option>Others</option>';
 }
 function getSubOpts(){return SUBSPEC_OPTS.map(s=>'<option>'+s+'</option>').join('');}
+
+// Toggle required (*) markers on fillet sub-fields based on product + spec
+function updateFilletRequiredMarkers(div, product, spec) {
+  const isFillet     = spec==='Fillet' || spec==='Skin on Fillet';
+  const isBasaFillet = product==='Basa' && isFillet;
+
+  // Sub Spec label and section title
+  const subLabel = div.querySelector('.sku-subspec-label');
+  const secTitle = div.querySelector('.sku-subspec-section-title');
+  // Pieces / Glaze required stars
+  const pcsStars = div.querySelectorAll('.sku-pieces-field .req-star, .sku-glaze-field .req-star');
+
+  if (subLabel) {
+    if (isBasaFillet) {
+      subLabel.innerHTML = 'Sub Spec <span style="color:var(--red)">*</span> <span style="font-size:10px;font-weight:400;color:var(--muted)">(required)</span>';
+    } else if (isFillet) {
+      subLabel.innerHTML = 'Sub Spec <span style="font-size:10px;font-weight:400;color:var(--muted)">(optional — will grow over time)</span>';
+    } else {
+      subLabel.innerHTML = 'Sub Spec <span style="font-size:10px;font-weight:400;color:var(--muted)">(optional)</span>';
+    }
+  }
+  if (secTitle) {
+    secTitle.textContent = isBasaFillet ? 'Sub Spec *' : (isFillet ? 'Sub Spec + Fillet Details *' : 'Details');
+  }
+  // Show/hide required stars on Pieces/Glaze (required for non-Basa-Fillet when spec is fillet)
+  pcsStars.forEach(s => s.style.display = (!isBasaFillet && isFillet) ? 'inline' : 'none');
+}
+
 function addSkuRow(prefill){
   skuCounter++;
   const idx=skuCounter, div=document.createElement('div');
@@ -1628,16 +1672,22 @@ function addSkuRow(prefill){
 
     // ── FILLET SECTION (sub-spec + packaging) ────────────────────────
     '<div class="sku-fillet" style="display:none">'+
-      '<div class="sku-section-label" style="margin-top:10px">Sub Spec <span style="font-weight:400;text-transform:none;font-size:10px">(Required for Basa Fillet · Optional for others)</span></div>'+
+      '<div class="sku-section-label" style="margin-top:10px">'+
+        '<span class="sku-subspec-section-title">Sub Spec</span>'+
+      '</div>'+
       '<div class="sku-fillet-grid">'+
-        '<div class="field"><label>Sub Spec</label>'+
-          '<select class="sku-subspec"><option value="">- None / Select -</option>'+getSubOpts()+'<option>Others</option></select></div>'+
-        '<div class="field sku-subspec-others-wrap" style="display:none"><label>Sub Spec (Others)</label>'+
-          '<input type="text" class="sku-subspec-others" placeholder="Enter sub spec"></div>'+
-        '<div class="field"><label>Pieces / Kg</label>'+
-          '<input type="text" class="sku-pieces" placeholder="6-8 pcs/kg"></div>'+
-        '<div class="field"><label>Glaze %</label>'+
-          '<input type="text" class="sku-glaze" placeholder="20%"></div>'+
+        '<div class="field sku-subspec-field">'+
+          '<label class="sku-subspec-label">Sub Spec</label>'+
+          '<select class="sku-subspec"><option value="">— Select —</option>'+getSubOpts()+'<option>Others</option></select></div>'+
+        '<div class="field sku-subspec-others-wrap" style="display:none">'+
+          '<label>Sub Spec (Others)</label>'+
+          '<input type="text" class="sku-subspec-others" placeholder="Enter sub spec — will be saved for future"></div>'+
+        '<div class="field sku-pieces-field">'+
+          '<label class="sku-pieces-label">Pieces / Kg <span class="req-star" style="color:var(--red)">*</span></label>'+
+          '<input type="text" class="sku-pieces" placeholder="e.g. 6-8"></div>'+
+        '<div class="field sku-glaze-field">'+
+          '<label class="sku-glaze-label">Glaze % <span class="req-star" style="color:var(--red)">*</span></label>'+
+          '<input type="text" class="sku-glaze" placeholder="e.g. 20%"></div>'+
       '</div>'+
       '<div class="sku-section-label" style="margin-top:10px">Packaging Details</div>'+
       '<div class="sku-fillet-grid">'+
@@ -1665,41 +1715,50 @@ function addSkuRow(prefill){
     div.querySelector('.sku-subspec').selectedIndex=0;
     div.querySelector('.sku-subspec-others-wrap').style.display='none';
     const spec=div.querySelector('.sku-spec').value;
-    if(this.value&&spec) fetchSkuStock(div, this.value, spec);
+    updateFilletRequiredMarkers(div, this.value, spec);
+    if(this.value&&spec) fetchSkuStock(div);
   });
 
-  // Spec → show sub-spec section + stock fetch
+  // Spec → show sub-spec section + update required fields + stock fetch
   div.querySelector('.sku-spec').addEventListener('change',function(){
     div.querySelector('.sku-spec-others-wrap').style.display=this.value==='Others'?'block':'none';
     const isFillet=this.value==='Fillet'||this.value==='Skin on Fillet';
-    // Show fillet/packaging section for fillet specs; show sub-spec section for all non-empty specs
     div.querySelector('.sku-fillet').style.display=this.value&&this.value!=='Others'?'block':'none';
-    // If Basa + Fillet: use full subspec list. Otherwise: optional with Others
     const product=div.querySelector('.sku-product').value;
+    const isBasaFillet=product==='Basa'&&isFillet;
+    // Sub Spec list and required marker
     const subsEl=div.querySelector('.sku-subspec');
-    if(product==='Basa'&&isFillet){
-      subsEl.innerHTML='<option value="">- Select -</option>'+getSubOpts();
+    if(isBasaFillet){
+      subsEl.innerHTML='<option value="">— Select Sub Spec —</option>'+getSubOpts();
     } else {
-      subsEl.innerHTML='<option value="">- None / Select -</option>'+getSubOpts()+'<option>Others</option>';
+      subsEl.innerHTML='<option value="">— Optional —</option>'+getSubOpts()+'<option>Others</option>';
     }
     div.querySelector('.sku-subspec-others-wrap').style.display='none';
-    if(product&&this.value) fetchSkuStock(div, product, this.value);
+    updateFilletRequiredMarkers(div, product, this.value);
+    if(product&&this.value) fetchSkuStock(div);
   });
 
   // Pkg type others
   div.querySelector('.sku-subspec').addEventListener('change',function(){
     div.querySelector('.sku-subspec-others-wrap').style.display=this.value==='Others'?'block':'none';
+    setTimeout(()=>fetchSkuStock(div), 50); // slight delay so Others text can be entered
   });
+  div.querySelector('.sku-subspec-others').addEventListener('change', ()=>fetchSkuStock(div));
+  div.querySelector('.sku-pieces').addEventListener('change',   ()=>fetchSkuStock(div));
+  div.querySelector('.sku-glaze').addEventListener('change',    ()=>fetchSkuStock(div));
+  div.querySelector('.sku-pkg-spec').addEventListener('change', ()=>fetchSkuStock(div));
   div.querySelector('.sku-pkg-type').addEventListener('change',function(){
     div.querySelector('.sku-pkg-type-others-wrap').style.display=this.value==='Others'?'block':'none';
+    setTimeout(()=>fetchSkuStock(div), 50);
   });
+  div.querySelector('.sku-pkg-type-others').addEventListener('change', ()=>fetchSkuStock(div));
 
   // Qty unit → sync stock unit labels + validate match
   div.querySelector('.sku-qty-unit').addEventListener('change',function(){
     // Re-fetch stock in new unit when unit changes
     const prod = div.querySelector('.sku-product').value;
     const spec = div.querySelector('.sku-spec').value;
-    if(prod && spec) { fetchSkuStock(div, prod, spec); return; }
+    if(prod && spec) { fetchSkuStock(div); return; }
     syncUnits(div); calcProdPlan(div);
   });
   div.querySelector('.sku-stocks-unit').addEventListener('change',function(){
@@ -1778,20 +1837,57 @@ function syncTotalFromBreakup(div){
 
 // Fetch remaining stock for a SKU key (product+spec) from Firestore
 // Aggregates all PENDING/APPROVED requests, subtracts allocated qty
-async function fetchSkuStock(div, product, spec){
-  if(!db||!product||!spec) return;
-  try {
-    const key=(product+'|'+spec).toLowerCase();
 
-    // ── 1. Collect all allocated qty, normalised to Kg ────────────
+// Build full SKU storage key from a form row div
+// Key = product|spec|subspec|pieceskg|glaze|pkgtype|pkgspec  (all lowercase, blanks kept as empty string)
+// Key logic:
+//   Basa + Fillet/Skin on Fillet  → product|spec|subspec
+//   All other fillet specs         → product|spec|piecesKg|glaze
+//   Non-fillet specs               → product|spec
+function buildSkuKey(product, spec, subspec, piecesKg, glaze) {
+  const p = (product||'').trim().toLowerCase();
+  const s = (spec||'').trim().toLowerCase();
+  const isFillet = s==='fillet'||s==='skin on fillet';
+  const isBasaFillet = p==='basa' && isFillet;
+  if (isBasaFillet) {
+    return [p, s, (subspec||'').trim().toLowerCase()].join('|');
+  } else if (isFillet) {
+    return [p, s, (piecesKg||'').trim().toLowerCase(), (glaze||'').trim().toLowerCase()].join('|');
+  } else {
+    return [p, s].join('|');
+  }
+}
+// Build key from a saved SKU object (from Firestore)
+function skuObjKey(s) {
+  return buildSkuKey(s.product, s.spec, s.subspec, s.piecesKg, s.glaze);
+}
+// Build key from a live form div
+function divSkuKey(div) {
+  const ps  = div.querySelector('.sku-product').value;
+  const ss  = div.querySelector('.sku-spec').value;
+  const sub = (()=>{ const sel=div.querySelector('.sku-subspec').value; const oth=div.querySelector('.sku-subspec-others')?.value.trim(); return sel==='Others'?oth:sel; })();
+  const pcs = div.querySelector('.sku-pieces').value;
+  const glz = div.querySelector('.sku-glaze').value;
+  return buildSkuKey(ps, ss, sub, pcs, glz);
+}
+
+async function fetchSkuStock(div){
+  // Build full key from current form state
+  const key = divSkuKey(div);
+  // Need at least product + spec to be useful
+  const product = div.querySelector('.sku-product').value;
+  const spec    = div.querySelector('.sku-spec').value;
+  if(!db || !product || !spec) return;
+
+  try {
+    // ── 1. Collect allocated qty for this exact SKU key (normalised to Kg) ──
     let allocatedKg = 0;
     const addAllocated = doc => {
       const r = doc.data();
       if(!r.skus) return;
-      r.skus.forEach(s=>{
-        if((s.product+'|'+s.spec).toLowerCase()===key){
+      r.skus.forEach(s => {
+        if(skuObjKey(s) === key){
           const q = parseFloat(s.qty)||0;
-          // Convert everything to Kg for a common base
           allocatedKg += toKg(q, s.qtyUnit||'Kg');
         }
       });
@@ -1806,53 +1902,57 @@ async function fetchSkuStock(div, product, spec){
       }
     }
 
-    // ── 2. Get latest stock snapshot (sorted in JS, no composite index) ──
+    // ── 2. Get latest stock snapshot for this exact SKU key ─────────
     const stockSnap = await db.collection('sku_stocks').where('key','==',key).get();
-    if(stockSnap.empty) return;
+    if(stockSnap.empty) {
+      // No stock record yet — clear the tag
+      const tag = div.querySelector('.sku-stock-tag');
+      if(tag){ tag.textContent=''; tag.style.display='none'; }
+      return;
+    }
 
-    const docs = stockSnap.docs.map(d=>d.data());
-    docs.sort((a,b)=>{
-      const ta = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
-      const tb2= b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
-      return tb2-ta;
+    const docs = stockSnap.docs.map(d => d.data());
+    docs.sort((a,b) => {
+      const ta  = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+      const tb2 = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+      return tb2 - ta;
     });
     const sd = docs[0];
     const storedUnit = sd.unit||'Kg';
 
-    // ── 3. Compute remaining (use pre-saved Kg fields if available) ──
-    const storedTotalKg = sd.totalKg!=null ? sd.totalKg : toKg(sd.total||0, storedUnit);
-    const glKg          = sd.glKg   !=null ? sd.glKg    : toKg(sd.gl||0, storedUnit);
-    const cfKg          = sd.cfKg   !=null ? sd.cfKg    : toKg(sd.cf||0, storedUnit);
+    // ── 3. Compute remaining in Kg ──────────────────────────────────
+    const storedTotalKg = sd.totalKg != null ? sd.totalKg : toKg(sd.total||0, storedUnit);
+    const glKg          = sd.glKg   != null ? sd.glKg    : toKg(sd.gl||0, storedUnit);
+    const cfKg          = sd.cfKg   != null ? sd.cfKg    : toKg(sd.cf||0, storedUnit);
     const remainingKg   = Math.max(0, storedTotalKg - allocatedKg);
 
-    // ── 4. Display unit = what planner selected for Qty Required ──
-    const qtyUnit = div.querySelector('.sku-qty-unit').value || storedUnit;
+    // ── 4. Convert to planner's selected unit ───────────────────────
+    const qtyUnit        = div.querySelector('.sku-qty-unit').value || storedUnit;
+    const remainingDisp  = parseFloat(convertUnit(remainingKg, 'Kg', qtyUnit).toFixed(2));
+    const glDisp         = parseFloat(convertUnit(Math.min(glKg, remainingKg), 'Kg', qtyUnit).toFixed(2));
+    const cfDisp         = parseFloat(convertUnit(Math.max(0, remainingKg - glKg), 'Kg', qtyUnit).toFixed(2));
+    const allocDisp      = parseFloat(convertUnit(allocatedKg, 'Kg', qtyUnit).toFixed(2));
+    const totalDisp      = parseFloat(convertUnit(storedTotalKg, 'Kg', qtyUnit).toFixed(2));
 
-    const remainingDisplay = parseFloat(convertUnit(remainingKg,'Kg',qtyUnit).toFixed(2));
-    const glDisplay = parseFloat(convertUnit(Math.min(glKg, remainingKg),'Kg',qtyUnit).toFixed(2));
-    const cfDisplay = parseFloat(convertUnit(Math.max(0, remainingKg-glKg),'Kg',qtyUnit).toFixed(2));
-
-    // ── 5. Fill form fields ───────────────────────────────────────
-    div.querySelector('.sku-stocks').value      = remainingDisplay;
+    // ── 5. Populate form ────────────────────────────────────────────
+    div.querySelector('.sku-stocks').value      = remainingDisp;
     div.querySelector('.sku-stocks-unit').value = qtyUnit;
-    div.querySelector('.sku-stock-gl').value    = glDisplay;
-    div.querySelector('.sku-stock-cf').value    = cfDisplay;
+    div.querySelector('.sku-stock-gl').value    = glDisp;
+    div.querySelector('.sku-stock-cf').value    = cfDisp;
     syncUnits(div); calcProdPlan(div);
 
-    // ── 6. Info tag ───────────────────────────────────────────────
-    const allocDisplay  = parseFloat(convertUnit(allocatedKg,'Kg',qtyUnit).toFixed(2));
-    const totalDisplay  = parseFloat(convertUnit(storedTotalKg,'Kg',qtyUnit).toFixed(2));
+    // ── 6. Info tag ─────────────────────────────────────────────────
     let convNote = '';
     if(storedUnit !== qtyUnit){
-      convNote = ' (stored as '+sd.total+' '+storedUnit+', converted @ 1 Case='+KG_PER_CASE+'Kg)';
+      convNote = ' · stored as '+sd.total+' '+storedUnit+', converted @1 Case='+KG_PER_CASE+'Kg';
     }
     const tag = div.querySelector('.sku-stock-tag');
-    tag.textContent = 'ℹ️ '+totalDisplay+' '+qtyUnit+' total | '
-      +allocDisplay+' '+qtyUnit+' allocated | '
-      +remainingDisplay+' '+qtyUnit+' available'+convNote;
-    tag.style.display = 'inline';
-    tag.style.background = remainingDisplay > 0 ? 'var(--glt)' : 'var(--rlt)';
-    tag.style.color      = remainingDisplay > 0 ? 'var(--green)' : 'var(--red)';
+    tag.textContent = 'ℹ️ '+totalDisp+' '+qtyUnit+' total | '
+      + allocDisp+' '+qtyUnit+' allocated | '
+      + remainingDisp+' '+qtyUnit+' available'+convNote;
+    tag.style.display    = 'inline';
+    tag.style.background = remainingDisp > 0 ? 'var(--glt)' : 'var(--rlt)';
+    tag.style.color      = remainingDisp > 0 ? 'var(--green)' : 'var(--red)';
 
   } catch(e){ console.warn('Stock fetch error:', e.message); }
 }
