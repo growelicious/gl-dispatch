@@ -978,6 +978,15 @@ function renderStats() {
 }
 
 
+function fmtTime(ts) {
+  if (!ts) return '—';
+  try {
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) +
+           ' ' + d.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
+  } catch(e) { return '—'; }
+}
+
 function pill(status, label) {
   const text = label || status || 'pending';
   const s = (status || 'pending').toLowerCase();
