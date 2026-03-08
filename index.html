@@ -115,6 +115,14 @@
   .sidebar-item.active { background: var(--sky); color: var(--blue); border-left-color: var(--blue); }
   .sidebar-item .icon { font-size: 15px; width: 18px; text-align: center; }
 
+
+  .edit-sku-row input[type="number"], .edit-sku-row select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: #fff; box-sizing: border-box; width: 100%;
+  }
+  .edit-sku-row input[type="number"]:focus, .edit-sku-row select:focus {
+    outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+  }
   .dash-tab {
     padding: 10px 18px; font-size: 12.5px; font-weight: 600; border: none;
     background: none; color: var(--slate); cursor: pointer;
@@ -707,6 +715,7 @@
       </div>
 
       <!-- Planner withdraw / CEO modify panel -->
+      <div id="d-modify-log" style="display:none;margin:0 24px 16px;padding:14px;border:1px solid #fcd34d;border-radius:8px;background:#fffef0"></div>
       <div id="d-planner-actions" style="display:none;margin-top:12px;padding:14px;background:#fff8f0;border:1px solid #fde68a;border-radius:8px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--amber);margin-bottom:10px" id="d-planner-actions-title">📝 Planner Actions</div>
         <div class="field"><label>Reason / Modification Note <span style="color:var(--red)">*</span></label>
@@ -787,16 +796,26 @@ function openEdit(id) {
   const r = allRequests.find(x => x.id === id);
   if (!r) return;
   editReqId = id;
-  document.getElementById('edit-subtitle').textContent = (r.dispatchId || id.slice(0,10)) + ' — ' + (r.buyer||'');
-  document.getElementById('edit-orderType').value    = r.orderType || '';
-  document.getElementById('edit-buyer').value        = r.buyer || '';
-  document.getElementById('edit-dispatchDate').value = r.dispatchDate || '';
+  document.getElementById('edit-subtitle').textContent =
+    (r.dispatchId || id.slice(0,10)) + ' — ' + (r.buyer||'') +
+    ' · Stage: ' + (r.stage||'Pending');
+  // Meta fields
+  document.getElementById('edit-orderType').value    = r.orderType  || '';
+  document.getElementById('edit-buyer').value        = r.buyer      || '';
+  document.getElementById('edit-dispatchDate').value = r.dispatchDate|| '';
   document.getElementById('edit-vehicleDate').value  = r.vehicleDate || '';
-  document.getElementById('edit-vehicle').value      = r.vehicle || '';
-  document.getElementById('edit-payment').value      = r.payment || '';
-  document.getElementById('edit-qty').value          = r.qty || '';
-  document.getElementById('edit-product').value      = r.product || '';
-  document.getElementById('edit-notes').value        = r.notes || '';
+  document.getElementById('edit-vehicle').value      = r.vehicle    || '';
+  document.getElementById('edit-payment').value      = r.payment    || '';
+  document.getElementById('edit-notes').value        = r.notes      || '';
+  document.getElementById('edit-reason-type').value  = '';
+  document.getElementById('edit-reason-note').value  = '';
+  document.getElementById('edit-stock-delta').style.display = 'none';
+
+  // Build SKU edit rows from existing SKUs
+  const list = document.getElementById('edit-sku-list');
+  list.innerHTML = '';
+  (r.skus || []).forEach((s, i) => buildEditSkuRow(s, i, list));
+
   document.getElementById('editOverlay').classList.add('open');
 }
 
@@ -806,10 +825,62 @@ function closeEdit(e) {
 }
 
 async function saveEdit() {
+  const r = allRequests.find(x => x.id === editReqId);
+  if (!r) return;
+
+  const reasonType = document.getElementById('edit-reason-type').value.trim();
+  const reasonNote = document.getElementById('edit-reason-note').value.trim();
+  if (!reasonType) { toast('Please select a modification reason', true); return; }
+  if (!reasonNote) { toast('Please describe the modification', true); return; }
+
   const btn = document.getElementById('editSaveBtn');
-  btn.innerHTML = '<span class="loading-spinner"></span> Saving...';
+  btn.innerHTML = '<span class="loading-spinner"></span> Saving & adjusting stock…';
   btn.disabled = true;
+
   try {
+    // ── 1. Build updated SKUs array from edit rows ──────────────────
+    const editRows = document.querySelectorAll('.edit-sku-row');
+    const updatedSkus = (r.skus || []).map((s, i) => {
+      const row = editRows[i];
+      if (!row) return s;
+      return {
+        ...s,
+        qty:     row.querySelector('.edit-sku-qty').value,
+        qtyUnit: row.querySelector('.edit-sku-unit').value,
+        price:   row.querySelector('.edit-sku-price').value,
+      };
+    });
+
+    // ── 2. Adjust sku_stocks for each SKU that changed ──────────────
+    const KG_PER_CASE = 10;
+    for (let i = 0; i < (r.skus||[]).length; i++) {
+      const orig = r.skus[i];
+      const upd  = updatedSkus[i];
+      if (!upd) continue;
+
+      const origKg = toKg(parseFloat(orig.qty)||0, orig.qtyUnit||'Kg');
+      const newKg  = toKg(parseFloat(upd.qty) ||0, upd.qtyUnit ||'Kg');
+      const deltaKg = newKg - origKg;
+      if (Math.abs(deltaKg) < 0.001) continue; // no change
+
+      const key = buildSkuKey(orig.product, orig.spec, orig.subspec, orig.piecesKg, orig.glaze);
+      const snap = await db.collection('sku_stocks').where('key','==',key).get();
+      if (!snap.empty) {
+        const doc    = snap.docs[0];
+        const sd     = doc.data();
+        // deltaKg > 0 means we need MORE stock → deduct from available
+        // deltaKg < 0 means we need LESS stock → return to available
+        const deltaCases  = deltaKg / KG_PER_CASE;
+        const newTotal    = Math.max(0, (sd.total||0) - deltaCases);
+        const newTotalKg  = newTotal * KG_PER_CASE;
+        await doc.ref.update({
+          total: newTotal, totalKg: newTotalKg,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    // ── 3. Save updated request ─────────────────────────────────────
     await db.collection('dispatch_requests').doc(editReqId).update({
       orderType:    document.getElementById('edit-orderType').value,
       buyer:        document.getElementById('edit-buyer').value,
@@ -817,18 +888,38 @@ async function saveEdit() {
       vehicleDate:  document.getElementById('edit-vehicleDate').value,
       vehicle:      document.getElementById('edit-vehicle').value,
       payment:      document.getElementById('edit-payment').value,
-      qty:          document.getElementById('edit-qty').value,
-      product:      document.getElementById('edit-product').value,
       notes:        document.getElementById('edit-notes').value,
+      skus:         updatedSkus,
       lastEditedBy: currentUser.email,
       lastEditedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastModifyReason: reasonType + (reasonNote ? ': ' + reasonNote : ''),
+      // Append to modification log
+      modifyLog: firebase.firestore.FieldValue.arrayUnion({
+        by:      currentUser.email,
+        role:    currentRole,
+        reason:  reasonType,
+        note:    reasonNote,
+        time:    new Date().toISOString(),
+        skuDeltas: Array.from(editRows).map((row, i) => {
+          const orig   = r.skus?.[i];
+          if (!orig) return null;
+          const origKg = toKg(parseFloat(orig.qty)||0, orig.qtyUnit||'Kg');
+          const newKg  = toKg(parseFloat(row.querySelector('.edit-sku-qty').value)||0, row.querySelector('.edit-sku-unit').value);
+          return {
+            sku:    [orig.product, orig.spec].filter(Boolean).join(' · '),
+            origKg, newKg, deltaKg: newKg - origKg
+          };
+        }).filter(Boolean)
+      }),
     });
+
     document.getElementById('editOverlay').classList.remove('open');
-    toast('✓ Changes saved successfully');
+    toast('✓ Order modified and stock adjusted successfully');
   } catch(e) {
     toast('Error: ' + e.message, true);
+    console.error(e);
   }
-  btn.innerHTML = '💾 Save Changes';
+  btn.innerHTML = '💾 Save & Adjust Stock';
   btn.disabled = false;
 }
 
@@ -1115,6 +1206,134 @@ function exportDashCSV() {
   a.href=url; a.download='GL_Dispatch_'+(fy||'All')+'_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click(); URL.revokeObjectURL(url);
   toast('✓ Exported '+rows.length+' records');
+}
+
+
+function buildEditSkuRow(s, idx, container) {
+  const div = document.createElement('div');
+  div.className = 'edit-sku-row';
+  div.setAttribute('data-orig-qty',    s.qty    || 0);
+  div.setAttribute('data-orig-unit',   s.qtyUnit|| 'Kg');
+  div.setAttribute('data-product',     s.product|| '');
+  div.setAttribute('data-spec',        s.spec   || '');
+  div.setAttribute('data-subspec',     s.subspec|| '');
+  div.setAttribute('data-pieces',      s.piecesKg||'');
+  div.setAttribute('data-glaze',       s.glaze  || '');
+
+  const origQty  = parseFloat(s.qty)  || 0;
+  const origUnit = s.qtyUnit || 'Kg';
+  const origKg   = toKg(origQty, origUnit);
+  const skuLabel = [s.product, s.spec, s.subspec, s.piecesKg, s.glaze].filter(Boolean).join(' · ');
+
+  div.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#fff';
+  div.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px">
+      SKU ${idx+1}: ${skuLabel}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end">
+      <div class="field">
+        <label style="font-size:11px;color:var(--muted)">Original Qty</label>
+        <div style="padding:6px 10px;background:#f0f4f8;border-radius:6px;font-size:13px;font-weight:600;color:var(--slate)">
+          ${origQty} ${origUnit} <span style="font-size:11px;color:var(--muted)">(${origKg} Kg)</span>
+        </div>
+      </div>
+      <div class="field">
+        <label style="font-size:11px;color:var(--muted)">New Qty *</label>
+        <div style="display:flex;gap:6px">
+          <input type="number" class="edit-sku-qty" value="${origQty}" min="0"
+            style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:700">
+          <select class="edit-sku-unit" style="width:72px;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            <option ${origUnit==='Kg'?'selected':''}>Kg</option>
+            <option ${origUnit==='Cases'?'selected':''}>Cases</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label style="font-size:11px;color:var(--muted)">Delta</label>
+        <div class="edit-sku-delta" style="padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;background:#f0f9ff;color:var(--blue)">—</div>
+      </div>
+    </div>
+    <div class="edit-sku-price-row" style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field">
+        <label style="font-size:11px;color:var(--muted)">Price / Kg (₹)</label>
+        <input type="number" class="edit-sku-price" value="${s.price||''}" min="0" step="0.01"
+          style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div class="field" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Line Value</div>
+        <div class="edit-sku-linevalue" style="padding:6px 10px;background:#f0fdf4;border-radius:6px;font-size:13px;font-weight:700;color:var(--green)">—</div>
+      </div>
+    </div>`;
+
+  // Wire qty/unit change → update delta + summary
+  div.querySelector('.edit-sku-qty').addEventListener('input',  () => updateEditDelta(div));
+  div.querySelector('.edit-sku-unit').addEventListener('change', () => updateEditDelta(div));
+  div.querySelector('.edit-sku-price').addEventListener('input', () => updateEditDelta(div));
+  updateEditDelta(div); // initial
+  container.appendChild(div);
+}
+
+function updateEditDelta(div) {
+  const origQty  = parseFloat(div.getAttribute('data-orig-qty'))  || 0;
+  const origUnit = div.getAttribute('data-orig-unit') || 'Kg';
+  const origKg   = toKg(origQty, origUnit);
+  const newQty   = parseFloat(div.querySelector('.edit-sku-qty').value)  || 0;
+  const newUnit  = div.querySelector('.edit-sku-unit').value;
+  const newKg    = toKg(newQty, newUnit);
+  const deltaKg  = newKg - origKg;
+  const price    = parseFloat(div.querySelector('.edit-sku-price').value) || 0;
+
+  const deltaEl = div.querySelector('.edit-sku-delta');
+  if (deltaKg > 0) {
+    deltaEl.textContent = '+' + deltaKg.toFixed(1) + ' Kg';
+    deltaEl.style.cssText = 'padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;background:#fef3c7;color:#92400e';
+  } else if (deltaKg < 0) {
+    deltaEl.textContent = deltaKg.toFixed(1) + ' Kg';
+    deltaEl.style.cssText = 'padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;background:#fee2e2;color:#991b1b';
+  } else {
+    deltaEl.textContent = 'No change';
+    deltaEl.style.cssText = 'padding:6px 10px;border-radius:6px;font-size:13px;font-weight:700;background:#f0f4f8;color:var(--slate)';
+  }
+
+  const lineVal = price * newKg;
+  div.querySelector('.edit-sku-linevalue').textContent = lineVal > 0 ? '₹' + lineVal.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
+
+  refreshStockDeltaSummary();
+}
+
+function refreshStockDeltaSummary() {
+  const rows = document.querySelectorAll('.edit-sku-row');
+  const lines = [];
+  let anyDelta = false;
+  rows.forEach(div => {
+    const product  = div.getAttribute('data-product');
+    const spec     = div.getAttribute('data-spec');
+    const subspec  = div.getAttribute('data-subspec');
+    const pieces   = div.getAttribute('data-pieces');
+    const glaze    = div.getAttribute('data-glaze');
+    const origQty  = parseFloat(div.getAttribute('data-orig-qty'))  || 0;
+    const origUnit = div.getAttribute('data-orig-unit') || 'Kg';
+    const origKg   = toKg(origQty, origUnit);
+    const newQty   = parseFloat(div.querySelector('.edit-sku-qty').value)  || 0;
+    const newUnit  = div.querySelector('.edit-sku-unit').value;
+    const newKg    = toKg(newQty, newUnit);
+    const deltaKg  = newKg - origKg;
+    if (deltaKg === 0) return;
+    anyDelta = true;
+    const label = [product, spec, subspec, pieces, glaze].filter(Boolean).join(' · ');
+    const dir   = deltaKg > 0 ? '▲ Deducting extra' : '▼ Returning';
+    const color = deltaKg > 0 ? '#92400e' : '#065f46';
+    const absDelta = Math.abs(deltaKg / 10); // to Cases
+    lines.push(`<div style="color:${color}">${dir} <b>${Math.abs(deltaKg).toFixed(1)} Kg (${absDelta.toFixed(2)} Cases)</b> from stock for <b>${label}</b></div>`);
+  });
+  const box = document.getElementById('edit-stock-delta');
+  const rowsEl = document.getElementById('edit-stock-delta-rows');
+  if (anyDelta && box && rowsEl) {
+    box.style.display = 'block';
+    rowsEl.innerHTML = lines.join('');
+  } else if (box) {
+    box.style.display = 'none';
+  }
 }
 
 function pill(status, label) {
@@ -1905,6 +2124,27 @@ function openDetail(id) {
     const titleEl = document.getElementById('d-planner-actions-title');
     if(titleEl) titleEl.textContent = currentRole==='CEO' ? '📝 CEO — Modify or Reject' : '📝 Planner Actions';
     document.getElementById('d-withdraw-remark').value = '';
+  }
+
+  // ── Modification History ───────────────────────────────────────
+  const modLogEl = document.getElementById('d-modify-log');
+  if (modLogEl) {
+    const modLog = r.modifyLog || [];
+    if (modLog.length) {
+      modLogEl.style.display = 'block';
+      modLogEl.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px">✏️ Modification History (${modLog.length})</div>` +
+        modLog.map(m=>`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">
+          <b>${m.reason}</b>${m.note?': '+m.note:''}<br>
+          <span style="color:var(--muted)">By ${m.role||''} · ${m.time?new Date(m.time).toLocaleDateString('en-IN'):''}</span>
+          ${(m.skuDeltas||[]).filter(d=>Math.abs(d.deltaKg||0)>0.001).map(d=>
+            `<div style="color:${d.deltaKg>0?'#92400e':'#065f46'};margin-top:3px;font-size:11px">
+              ${d.sku}: ${d.origKg} → ${d.newKg} Kg
+              <b>(${d.deltaKg>0?'+':''}${d.deltaKg.toFixed(1)} Kg)</b>
+            </div>`).join('')}
+        </div>`).join('');
+    } else {
+      modLogEl.style.display = 'none';
+    }
   }
 
   document.getElementById('detailOverlay').classList.add('open');
