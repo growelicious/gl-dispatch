@@ -348,7 +348,11 @@
         <div class="card" style="border-top-left-radius:0;border-top-right-radius:0">
           <div class="card-header" style="flex-wrap:wrap;gap:8px" id="dash-card-header">
             <h2 id="dash-table-title">Recent Dispatch Requests</h2>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="dash-filter-fy" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;display:none;min-width:100px">
+                <option value="">All FY</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" id="dash-export-btn" onclick="exportDashCSV()" style="display:none">⬇ Export CSV</button>
               <button class="btn btn-ghost btn-sm" onclick="showView('all-requests')" style="font-size:12px">View All ›</button>
               <button class="btn btn-primary btn-sm" data-action="gotoNew" id="dash-new-btn">+ New Request</button>
             </div>
@@ -1046,6 +1050,73 @@ function filterAndGoto(status) {
   if (sel) { sel.value = status; renderAllRequests(); }
 }
 
+
+function showDashExport(show) {
+  const fyEl  = document.getElementById('dash-filter-fy');
+  const btnEl = document.getElementById('dash-export-btn');
+  if (fyEl)  fyEl.style.display  = show ? 'inline-block' : 'none';
+  if (btnEl) btnEl.style.display = show ? 'inline-block' : 'none';
+  if (show) populateDashFYFilter();
+}
+
+function populateDashFYFilter() {
+  const sel = document.getElementById('dash-filter-fy');
+  if (!sel) return;
+  const fys = new Set();
+  allRequests.forEach(r => { const fy = getFYLabel(r.createdAt); if(fy) fys.add(fy); });
+  for (let i=0;i<10;i++) {
+    const yr = new Date().getFullYear()-i;
+    fys.add(getFYLabel(new Date(yr,3,1)));
+  }
+  sel.innerHTML = '<option value="">All FY</option>' +
+    Array.from(fys).sort().reverse().map(f=>`<option value="${f}">${f}</option>`).join('');
+}
+
+function exportDashCSV() {
+  const fy = document.getElementById('dash-filter-fy')?.value || '';
+  const role = currentRole;
+  let rows = allRequests;
+  if (fy) rows = rows.filter(r => getFYLabel(r.createdAt) === fy);
+
+  const STEP_KEYS2 = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+  const STEP_LABELS2 = {finance1:'Finance Review',ceo:'CEO',gm:'GM',pm:'PM',qc:'QC',finance2:'Finance Invoice',dispatch:'Dispatch'};
+
+  function getStageLabel(r) {
+    if (r.status==='approved') return 'Fully Approved';
+    for (const k of STEP_KEYS2) {
+      const st = r.approvals?.[k]?.status;
+      if (!st||st==='pending') return 'Pending at '+STEP_LABELS2[k];
+      if (st==='hold') return 'Hold at '+STEP_LABELS2[k];
+    }
+    return 'Done';
+  }
+
+  const headers = ['Order No','Created','Customer','Order Type','Dispatch Date',
+    'Payment Terms','Vehicle Arrangement','Transport','Current Stage',
+    'SKU Count','Total Value (₹)','Finance Decision','Finance P&L (₹)','Margin %',
+    'KYC','GST','TCS','Credit Limit','Outstanding'];
+  const lines = [headers.join(',')];
+  rows.forEach(r => {
+    const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
+    const fa = r.approvals?.finance1 || {};
+    const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-IN') : '';
+    lines.push([
+      r.dispatchId||r.id.slice(0,10), dt, r.buyer||'', r.orderType||'',
+      r.dispatchDate||'', r.payment||'', r.vehicleArrangement||'', r.transport||'',
+      getStageLabel(r), (r.skus||[]).length, totalVal.toFixed(2),
+      fa.decision||'', fa.pl||'', fa.margin||'',
+      fa.kyc||'', fa.gst||'', fa.tcs||'', fa.creditLimit||'', fa.outstanding||''
+    ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')],{type:'text/csv'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download='GL_Dispatch_'+(fy||'All')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(url);
+  toast('✓ Exported '+rows.length+' records');
+}
+
 function pill(status, label) {
   const text = label || status || 'pending';
   const s = (status || 'pending').toLowerCase();
@@ -1065,105 +1136,171 @@ function renderDashboard() {
   if (!tb) return;
 
   const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+  const STEP_LABELS = {
+    finance1: 'Finance (Review)',
+    ceo:      'CEO',
+    gm:       'General Manager',
+    pm:       'Production Manager',
+    qc:       'QC Manager',
+    finance2: 'Finance (Invoice/E-Way)',
+    dispatch: 'Dispatch Manager'
+  };
 
-  // ── helper: is an order awaiting THIS user's step? ──
+  function getOrderStage(r) {
+    // Returns the current step key where the order is sitting
+    if (r.status==='approved') return 'done';
+    if (r.status==='rejected') return 'rejected';
+    for (const key of STEP_KEYS) {
+      const st = r.approvals?.[key]?.status;
+      if (!st || st === 'pending') return key;
+      if (st === 'hold') return key + '_hold';
+    }
+    return 'done';
+  }
+
   function needsMyAction(r) {
     if (r.status==='approved'||r.status==='rejected') return false;
     const myKey = getChainKey(currentRole, r);
     if (!myKey) return false;
     const a = r.approvals?.[myKey];
     if (!a || a.status!=='pending') return false;
-    const idx = STEP_KEYS.indexOf(myKey);
-    for (let i=0;i<idx;i++) if (r.approvals?.[STEP_KEYS[i]]?.status!=='approved') return false;
+    const si = STEP_KEYS.indexOf(myKey);
+    for (let i=0;i<si;i++) if(r.approvals?.[STEP_KEYS[i]]?.status!=='approved') return false;
     return true;
   }
 
-  // ── FINANCE APPROVER — 4-tab dashboard ──────────────
+  // ── FINANCE — 4-tab dashboard ────────────────────────────────
   if (currentRole === 'Finance Approver') {
     if (tabs) tabs.style.display = 'block';
-
-    // Bucket each request
-    const buckets = { 'pending-review':[], 'submitted-ceo':[], 'invoice-pending':[], 'invoice-done':[] };
+    const buckets = {'pending-review':[],'submitted-ceo':[],'invoice-pending':[],'invoice-done':[]};
     allRequests.forEach(r => {
       const f1 = r.approvals?.finance1?.status;
       const f2 = r.approvals?.finance2?.status;
-      const isFullyApproved = r.status === 'approved';
-
-      if (needsMyAction(r) && !isFullyApproved) {
-        buckets['pending-review'].push(r);
-      } else if (f1==='approved' && f2!=='approved' && !isFullyApproved) {
-        buckets['submitted-ceo'].push(r);
-      } else if (f1==='approved' && r.approvals?.qc?.status==='approved' && f2!=='approved') {
-        // Back at finance for step 6 — invoice/e-waybill pending
-        buckets['invoice-pending'].push(r);
-        buckets['submitted-ceo'] = buckets['submitted-ceo'].filter(x=>x.id!==r.id);
-      } else if (f2==='approved' && !isFullyApproved) {
-        buckets['invoice-done'].push(r);
-      } else if (isFullyApproved) {
-        buckets['invoice-done'].push(r);
-      }
+      const qcDone = r.approvals?.qc?.status === 'approved';
+      if (r.status==='approved') { buckets['invoice-done'].push(r); return; }
+      if (needsMyAction(r))      { buckets['pending-review'].push(r); return; }
+      if (f1==='approved' && qcDone && (f2==='pending'||!f2)) { buckets['invoice-pending'].push(r); return; }
+      if (f2==='approved')       { buckets['invoice-done'].push(r); return; }
+      if (f1==='approved')       { buckets['submitted-ceo'].push(r); return; }
     });
-
-    // Update stat cards
     if (stats) stats.innerHTML =
-      _statCard('Pending Review', buckets['pending-review'].length, 'var(--amber)', "switchDashTab(document.querySelector('[data-tab=\'pending-review\']'),\'pending-review\')")+
-      _statCard('Forwarded to CEO', buckets['submitted-ceo'].length, 'var(--blue)', "switchDashTab(document.querySelector('[data-tab=\'submitted-ceo\']'),\'submitted-ceo\')")+
-      _statCard('Invoice / E-Way Pending', buckets['invoice-pending'].length, 'var(--red)', "switchDashTab(document.querySelector('[data-tab=\'invoice-pending\']'),\'invoice-pending\')")+
-      _statCard('Invoice / E-Way Done', buckets['invoice-done'].length, 'var(--green)', "switchDashTab(document.querySelector('[data-tab=\'invoice-done\']'),\'invoice-done\')");
-
-    // Render the active tab
+      _statCard('🔔 Pending Review',      buckets['pending-review'].length,  'var(--amber)', "switchDashTab(document.querySelector('[data-tab=\"pending-review\"]'),  'pending-review')")+
+      _statCard('📤 Forwarded to CEO',    buckets['submitted-ceo'].length,   'var(--blue)',  "switchDashTab(document.querySelector('[data-tab=\"submitted-ceo\"]'),   'submitted-ceo')")+
+      _statCard('🧾 Invoice/E-Way Pend.', buckets['invoice-pending'].length, 'var(--red)',   "switchDashTab(document.querySelector('[data-tab=\"invoice-pending\"]'), 'invoice-pending')")+
+      _statCard('✅ Invoice/E-Way Done',  buckets['invoice-done'].length,    'var(--green)', "switchDashTab(document.querySelector('[data-tab=\"invoice-done\"]'),    'invoice-done')");
     const activeTab = document.querySelector('.dash-tab.active')?.dataset?.tab || 'pending-review';
     _renderFinanceBucket(buckets[activeTab], activeTab, tb);
-
-    // Update tab badges
     document.querySelectorAll('.dash-tab').forEach(btn => {
       const t = btn.dataset.tab;
       const n = buckets[t]?.length || 0;
-      btn.textContent = {
-        'pending-review':  '🔔 Pending Review',
-        'submitted-ceo':   '📤 Forwarded to CEO',
-        'invoice-pending': '🧾 Invoice / E-Waybill Pending',
-        'invoice-done':    '✅ Invoice / E-Way Generated'
-      }[t] + (n ? ' ('+n+')' : '');
+      btn.textContent = {'pending-review':'🔔 Pending Review','submitted-ceo':'📤 Forwarded to CEO',
+        'invoice-pending':'🧾 Invoice/E-Waybill Pending','invoice-done':'✅ Invoice/E-Way Generated'}[t]+(n?' ('+n+')':'');
     });
+    showDashExport(true);
     return;
   }
 
-  // ── ALL OTHER ROLES — simple dashboard ──────────────
-  if (tabs) tabs.style.display = 'none';
+  // ── PLANNER / CEO — full pipeline overview ───────────────────
+  if (['Planner','CEO'].includes(currentRole)) {
+    if (tabs) tabs.style.display = 'none';
 
-  // Role-aware stat cards
+    // Pipeline stat cards — count per stage
+    const pipelineCounts = {};
+    STEP_KEYS.forEach(k => pipelineCounts[k] = 0);
+    let approvedCount = 0, totalCount = allRequests.length;
+    allRequests.forEach(r => {
+      const stage = getOrderStage(r);
+      if (stage === 'done') approvedCount++;
+      else if (STEP_KEYS.includes(stage)) pipelineCounts[stage]++;
+    });
+
+    if (stats) stats.innerHTML =
+      STEP_KEYS.map(k =>
+        _statCard(STEP_LABELS[k], pipelineCounts[k], pipelineCounts[k]>0?'var(--amber)':'var(--green)',
+          `showPipelineFilter('${k}')`)
+      ).join('') +
+      _statCard('✅ Fully Approved', approvedCount, 'var(--green)', "showPipelineFilter('done')") +
+      _statCard('📦 Total', totalCount, 'var(--navy)', "showPipelineFilter('all')");
+
+    // Table header
+    const thead = document.getElementById('dash-thead');
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>Current Stage</th><th>Status</th><th>Action</th></tr>';
+
+    // Show all requests with current stage indicator
+    const filter = window._dashPipelineFilter || 'all';
+    const rows = allRequests.filter(r => {
+      if (filter === 'all') return true;
+      if (filter === 'done') return r.status === 'approved';
+      return getOrderStage(r) === filter;
+    });
+
+    const titleEl = document.getElementById('dash-table-title');
+    if (titleEl) titleEl.textContent = filter==='all' ? 'All Dispatch Requests' :
+      filter==='done' ? '✅ Fully Approved' : ('Pending at: ' + (STEP_LABELS[filter]||filter));
+
+    showDashExport(true);
+    if (!rows.length) {
+      tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>No requests in this category.</p></td></tr>`;
+      return;
+    }
+
+    tb.innerHTML = rows.map(r => {
+      const stage = getOrderStage(r);
+      const isApproved = stage === 'done';
+      const stageName = isApproved ? '✅ Fully Approved' : (STEP_LABELS[stage] ? '⏳ Pending at ' + STEP_LABELS[stage] : stage);
+      const stageColor = isApproved ? 'var(--green)' : 'var(--amber)';
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-size:12px">${r.dispatchDate||'—'}</td>
+        <td style="font-size:12px;font-weight:600;color:${stageColor}">${stageName}</td>
+        <td>${pill(r.status)}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
+      </tr>`;
+    }).join('');
+    return;
+  }
+
+  // ── ALL OTHER ROLES — action-focused dashboard ───────────────
+  if (tabs) tabs.style.display = 'none';
   const myPending  = allRequests.filter(r => needsMyAction(r)).length;
   const myApproved = allRequests.filter(r => {
-    const myKey = getChainKey(currentRole, r);
-    return myKey && r.approvals?.[myKey]?.status === 'approved';
+    const k = getChainKey(currentRole,r);
+    return k && r.approvals?.[k]?.status==='approved';
   }).length;
-  const total = allRequests.length;
-
+  showDashExport(false);
   if (stats) stats.innerHTML =
-    _statCard('Total', total, 'var(--navy)', "showView('all-requests')")+
+    _statCard('Total', allRequests.length, 'var(--navy)', "showView('all-requests')")+
     _statCard('Needs My Action', myPending, 'var(--amber)', "showView('pending')")+
-    _statCard('I\'ve Approved', myApproved, 'var(--green)', "filterAndGoto('approved')");
+    _statCard("I've Approved", myApproved, 'var(--green)', "filterAndGoto('approved')");
 
   if (!allRequests.length) {
     tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">📋</div><p>No dispatch requests yet.</p></td></tr>`;
     return;
   }
+  const thead2 = document.getElementById('dash-thead');
+  if (thead2) thead2.innerHTML = '<tr><th>ID</th><th>Order Type</th><th>Customer</th><th>Dispatch Date</th><th>Stage</th><th>Status</th><th>Action</th></tr>';
 
-  // Show role-relevant requests first (needing action), then rest
-  const actionFirst = [...allRequests].sort((a,b) => needsMyAction(b)-needsMyAction(a)).slice(0,15);
+  const actionFirst = [...allRequests].sort((a,b)=>needsMyAction(b)-needsMyAction(a)).slice(0,15);
   tb.innerHTML = actionFirst.map(r => {
     const urgent = needsMyAction(r);
-    return `<tr style="${urgent?'background:#fffbeb;':''} ">
+    return `<tr style="${urgent?'background:#fffbeb':''}">
       <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
       <td style="font-size:12px">${r.orderType||'—'}</td>
       <td style="font-weight:600">${r.buyer||'—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.stage||''}">${urgent?'<b>':''}${r.stage||'—'}${urgent?'</b>':''}</td>
+      <td style="font-size:12px">${r.dispatchDate||'—'}</td>
+      <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${urgent?'<b>':''}${r.stage||'—'}${urgent?'</b>':''}</td>
       <td>${pill(r.status)}</td>
       <td><button class="btn ${urgent?'btn-primary':'btn-ghost'} btn-sm" onclick="openDetail('${r.id}')">${urgent?'Review ›':'View ›'}</button></td>
     </tr>`;
   }).join('');
+}
+
+function showPipelineFilter(filter) {
+  window._dashPipelineFilter = filter;
+  renderDashboard();
+  // scroll table into view
+  document.getElementById('dashboardTable')?.closest('.card')?.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 function _statCard(label, val, color, onclick) {
@@ -2140,6 +2277,7 @@ document.addEventListener('DOMContentLoaded', function() {
   on('[data-action="editFromDetail"]', 'click', function(){ editFromDetail(); });
   document.addEventListener('change',function(e){
     if(e.target.id==='filter-fy'||e.target.id==='filter-status') renderAllRequests();
+    if(e.target.id==='dash-filter-fy') renderDashboard();
   });
   // FY and status filter changes
   document.addEventListener('change', function(e){
