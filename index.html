@@ -1389,7 +1389,7 @@ function openDetail(id) {
           return '<tr style="border-bottom:1px solid #eee">'+
             '<td style="padding:6px 8px">'+s.product+'</td>'+
             '<td style="padding:6px 8px">'+s.spec+(s.subspec?' / '+s.subspec:'')+'</td>'+
-            '<td style="padding:6px 8px;text-align:right">'+s.qty+' '+s.qtyUnit+'</td>'+
+            '<td style="padding:6px 8px;text-align:right">'+toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg').toLocaleString('en-IN')+' Kg</td>'+
             '<td style="padding:6px 8px;text-align:right">₹'+parseFloat(s.price||0).toLocaleString('en-IN')+'</td>'+
             '<td style="padding:6px 8px;text-align:right;font-weight:600">₹'+val.toLocaleString('en-IN')+'</td>'+
             '</tr>';
