@@ -994,8 +994,24 @@ function renderAll() {
 
 function renderStats() {
   const total    = allRequests.length;
-  const pending  = allRequests.filter(r=>r.status==='pending').length;
   const approved = allRequests.filter(r=>r.status==='approved').length;
+  // Pending count: for Finance, only count items truly needing their action
+  let pending;
+  if (currentRole === 'Finance Approver') {
+    const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+    pending = allRequests.filter(r => {
+      if (r.status==='approved'||r.status==='rejected') return false;
+      const myKey = getChainKey(currentRole, r);
+      if (!myKey) return false;
+      const a = r.approvals?.[myKey];
+      if (!a || a.status!=='pending') return false;
+      const idx = STEP_KEYS.indexOf(myKey);
+      for (let i=0;i<idx;i++) if(r.approvals?.[STEP_KEYS[i]]?.status!=='approved') return false;
+      return true;
+    }).length;
+  } else {
+    pending = allRequests.filter(r=>r.status==='pending').length;
+  }
   const pe = document.getElementById('s-pending');
   const ae = document.getElementById('s-approved');
   const te = document.getElementById('s-total');
@@ -1042,80 +1058,159 @@ function renderDashboard() {
     return;
   }
   const rows = allRequests.slice(0, 15);
-  tb.innerHTML = rows.map(r => `
-    <tr>
+  tb.innerHTML = rows.map(r => {
+    // For Finance: show whether this order needs their action or is already submitted
+    let actionLabel = '';
+    if (currentRole === 'Finance Approver') {
+      const f1 = r.approvals?.finance1?.status;
+      const f2 = r.approvals?.finance2?.status;
+      if (f1 === 'approved' && f2 !== 'approved') actionLabel = '<span style="font-size:10px;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 6px;margin-left:4px">Submitted to CEO</span>';
+      else if (f1 === 'pending' || !f1) actionLabel = '<span style="font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:2px 6px;margin-left:4px">Needs Review</span>';
+      else if (f2 === 'approved') actionLabel = '<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;margin-left:4px">Fully Cleared</span>';
+    }
+    return `<tr>
       <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
       <td style="font-size:12px">${r.orderType||'—'}</td>
-      <td style="font-weight:600">${r.buyer||'—'}</td>
+      <td style="font-weight:600">${r.buyer||'—'}${actionLabel}</td>
       <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td style="font-size:12px;color:var(--slate);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.stage||'—'}</td>
+      <td style="font-size:12px;color:var(--slate);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.stage||''}">${r.stage||'—'}</td>
       <td>${pill(r.status)}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function renderPending() {
   const tb = document.getElementById('pendingTable');
   if (VIEW_ONLY.includes(currentRole)) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">👁️</div><p>Your role (${currentRole}) has view-only access. Use All Requests to track everything.</p></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">👁️</div><p>Your role (${currentRole}) has view-only access. Use All Requests to track everything.</p></td></tr>`;
     return;
   }
   if (currentRole === 'Planner') {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → GM → PM → QC → Finance → Dispatch. Track progress in All Requests.</p></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Track progress in All Requests.</p></td></tr>`;
     return;
   }
-  // stepKeys in order — Finance appears at index 0 (finance1) and 5 (finance2)
+
   const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
 
+  // Strictly: only show requests where THIS user's step is actively pending
+  // and all prior steps are approved
   const mine = allRequests.filter(r => {
     if (r.status === 'approved' || r.status === 'rejected') return false;
-    // What key does this user act on for THIS request?
     const myKey = getChainKey(currentRole, r);
     if (!myKey) return false;
     const a = r.approvals?.[myKey];
+    // Must be pending (not yet acted on)
     if (!a || a.status !== 'pending') return false;
     // All prior steps must be approved
     const myStepIdx = STEP_KEYS.indexOf(myKey);
-    if (myStepIdx < 0) return false;
     for (let i = 0; i < myStepIdx; i++) {
       if (r.approvals?.[STEP_KEYS[i]]?.status !== 'approved') return false;
     }
     return true;
   });
 
+  // For Finance: also show "already submitted" requests separately
+  let submittedHtml = '';
+  if (currentRole === 'Finance Approver') {
+    const submitted = allRequests.filter(r => {
+      if (r.status === 'approved' || r.status === 'rejected') return false;
+      const f1 = r.approvals?.finance1?.status;
+      const f2 = r.approvals?.finance2?.status;
+      // Finance1 done but full order not yet complete
+      return (f1 === 'approved' && f2 !== 'approved') || f1 === 'hold';
+    });
+    if (submitted.length) {
+      const hdrCols = '<th>Order No</th><th>Customer</th><th>Created</th><th>Payment Terms</th><th>Invoice Value</th><th>Stage</th><th></th>';
+      submittedHtml = `
+        <div style="margin-top:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--slate);padding:0 0 8px">
+            ✅ Submitted / In Progress (${submitted.length})
+          </div>
+          <table class="tbl"><thead><tr>${hdrCols}</tr></thead><tbody>
+          ${submitted.map(r => {
+            const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
+            const f1 = r.approvals?.finance1;
+            const statusTag = f1?.status==='hold'
+              ? `<span style="background:#fee2e2;color:#991b1b;border-radius:4px;padding:2px 7px;font-size:11px">⏸ Hold: ${f1.holdReason||''}</span>`
+              : `<span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 7px;font-size:11px">→ ${r.stage||'In Progress'}</span>`;
+            return `<tr>
+              <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+              <td style="font-weight:600">${r.buyer||'—'}</td>
+              <td style="font-size:12px">${r.createdAt?.toDate?.().toLocaleDateString('en-IN')||'—'}</td>
+              <td style="font-size:12px">${r.payment||'—'}</td>
+              <td style="font-weight:600">₹${totalVal.toLocaleString('en-IN')}</td>
+              <td>${statusTag}</td>
+              <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
+            </tr>`;
+          }).join('')}
+          </tbody></table>
+        </div>`;
+    }
+  }
+
   if (!mine.length) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>No pending approvals for your role right now.</p></td></tr>`;
+    const emptyMsg = currentRole === 'Finance Approver'
+      ? 'No new requests pending your Finance review right now.'
+      : 'No pending approvals for your role right now.';
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">✅</div><p>${emptyMsg}</p></td></tr>`;
+    // Still show submitted section for Finance
+    const wrap = tb.closest('.card-body') || tb.parentElement;
+    let subEl = wrap?.querySelector('.finance-submitted');
+    if (!subEl && submittedHtml) {
+      const div = document.createElement('div');
+      div.className = 'finance-submitted';
+      div.innerHTML = submittedHtml;
+      wrap?.appendChild(div);
+    }
     return;
   }
-  // Finance: show enriched customer summary
+
+  // Finance: enriched columns
   if (currentRole === 'Finance Approver') {
+    const hdr = tb.closest('table')?.querySelector('thead tr');
+    if (hdr) hdr.innerHTML = '<th>Order No</th><th>Customer</th><th>Created</th><th>Payment Terms</th><th>Invoice Value</th><th>Stage</th><th>Action</th>';
     tb.innerHTML = mine.map(r => {
-      const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg')),0);
+      const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
       return `<tr>
         <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
         <td style="font-weight:600">${r.buyer||'—'}</td>
         <td style="font-size:12px">${r.createdAt?.toDate?.().toLocaleDateString('en-IN')||r.dispatchDate||'—'}</td>
         <td style="font-size:12px">${r.payment||'—'}</td>
         <td style="font-size:12px;font-weight:600">₹${totalVal.toLocaleString('en-IN')}</td>
-        <td>${pill('pending', r.stage||'Pending')}</td>
+        <td>${pill('pending','Needs Review')}</td>
         <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
       </tr>`;
     }).join('');
-    // Finance gets richer column headers — swap them
-    const hdr = tb.closest('table')?.querySelector('thead tr');
-    if (hdr) hdr.innerHTML = '<th>Order No</th><th>Customer</th><th>Created</th><th>Payment Terms</th><th>Invoice Value</th><th>Stage</th><th>Action</th>';
-    return;
+  } else {
+    tb.innerHTML = mine.map(r => `
+      <tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
+        <td>${pill('pending', r.stage||'Pending')}</td>
+        <td style="font-size:12px;color:var(--slate)">${r.submittedBy||'—'}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
+      </tr>`).join('');
   }
 
-  tb.innerHTML = mine.map(r => `
-    <tr>
-      <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
-      <td style="font-weight:600">${r.buyer||'—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td>${pill('pending', r.stage||'Pending')}</td>
-      <td style="font-size:12px;color:var(--slate)">${r.submittedBy||'—'}</td>
-      <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
-    </tr>`).join('');
+  // Append submitted section for Finance below the pending table
+  if (currentRole === 'Finance Approver' && submittedHtml) {
+    const wrap = tb.closest('.card-body') || tb.parentElement;
+    let subEl = wrap?.querySelector('.finance-submitted');
+    if (subEl) subEl.innerHTML = submittedHtml;
+    else {
+      const div = document.createElement('div');
+      div.className = 'finance-submitted';
+      div.style.cssText = 'padding:0 16px 16px';
+      div.innerHTML = submittedHtml;
+      wrap?.appendChild(div);
+    }
+  } else {
+    // Clean up submitted section for other roles
+    const subEl = document.querySelector('.finance-submitted');
+    if (subEl) subEl.remove();
+  }
 }
 
 function renderAllRequests() {
