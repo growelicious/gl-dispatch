@@ -732,12 +732,29 @@
 
 <!-- ═══ EDIT MODAL ══════════════════════════════════════════════════ -->
 <div class="detail-overlay" id="editOverlay" data-action="overlayEdit">
-  <div class="detail-panel" data-stop="true" style="width:560px">
+  <div class="detail-panel" data-stop="true" style="width:760px;max-width:98vw">
     <div class="detail-header">
-      <div><h3>Edit Dispatch Request</h3><p id="edit-subtitle"></p></div>
-      <button class="close-btn" data-action="closeEdit">×</button>
+      <div><h3>✏️ Modify Order</h3><p id="edit-subtitle" style="color:var(--slate);font-size:13px"></p></div>
+      <button class="close-btn" onclick="document.getElementById('editOverlay').classList.remove('open')">×</button>
     </div>
     <div class="detail-body">
+
+      <!-- Reason -->
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚠️ Modification Reason (Required)</div>
+        <select id="edit-reason-type" style="width:100%;margin-bottom:8px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+          <option value="">— Select reason —</option>
+          <option>Buyer Demand Change</option>
+          <option>Production Constraint</option>
+          <option>Stock Unavailability</option>
+          <option>Logistics Change</option>
+          <option>Others</option>
+        </select>
+        <textarea id="edit-reason-note" placeholder="Describe the modification (required)…"
+          style="width:100%;min-height:56px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+
+      <!-- Order meta -->
       <div class="form-grid">
         <div class="field"><label>Order Type</label>
           <select id="edit-orderType">
@@ -752,18 +769,34 @@
         <div class="field"><label>Vehicle Number</label><input type="text" id="edit-vehicle"></div>
         <div class="field"><label>Payment Terms</label>
           <select id="edit-payment">
-            <option>Advance</option>
-            <option>Credit</option>
-            <option>Payment After Loading</option>
+            <option>Advance</option><option>Credit</option><option>Payment After Loading</option>
           </select>
         </div>
-        <div class="field"><label>Qty</label><input type="text" id="edit-qty"></div>
-        <div class="field"><label>Product</label><input type="text" id="edit-product"></div>
       </div>
-      <div class="field" style="margin-top:12px"><label>Notes</label><textarea id="edit-notes"></textarea></div>
-      <div style="display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-        <button class="btn btn-primary" id="editSaveBtn" data-action="saveEdit">💾 Save Changes</button>
-        <button class="btn btn-ghost" data-action="closeEdit">Cancel</button>
+      <div class="field" style="margin-top:10px"><label>Notes</label>
+        <textarea id="edit-notes" style="min-height:52px"></textarea>
+      </div>
+
+      <!-- SKU section -->
+      <div style="margin-top:18px;border-top:2px solid var(--border);padding-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700;color:var(--navy)">📦 SKU Quantities</div>
+          <div style="font-size:11px;color:var(--slate);background:var(--sky);padding:4px 10px;border-radius:6px">
+            Modify qty · Stock auto-adjusted
+          </div>
+        </div>
+        <div id="edit-sku-list"></div>
+      </div>
+
+      <!-- Stock delta -->
+      <div id="edit-stock-delta" style="display:none;margin-top:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 14px">
+        <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:6px">📊 Stock Adjustment Preview</div>
+        <div id="edit-stock-delta-rows" style="font-size:12px;color:var(--slate);line-height:1.8"></div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+        <button class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()">💾 Save & Adjust Stock</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('editOverlay').classList.remove('open')">Cancel</button>
       </div>
     </div>
   </div>
@@ -794,27 +827,33 @@ let editReqId = null;
 
 function openEdit(id) {
   const r = allRequests.find(x => x.id === id);
-  if (!r) return;
+  if (!r) { toast('Order not found', true); return; }
   editReqId = id;
-  document.getElementById('edit-subtitle').textContent =
-    (r.dispatchId || id.slice(0,10)) + ' — ' + (r.buyer||'') +
-    ' · Stage: ' + (r.stage||'Pending');
-  // Meta fields
-  document.getElementById('edit-orderType').value    = r.orderType  || '';
-  document.getElementById('edit-buyer').value        = r.buyer      || '';
-  document.getElementById('edit-dispatchDate').value = r.dispatchDate|| '';
-  document.getElementById('edit-vehicleDate').value  = r.vehicleDate || '';
-  document.getElementById('edit-vehicle').value      = r.vehicle    || '';
-  document.getElementById('edit-payment').value      = r.payment    || '';
-  document.getElementById('edit-notes').value        = r.notes      || '';
-  document.getElementById('edit-reason-type').value  = '';
-  document.getElementById('edit-reason-note').value  = '';
-  document.getElementById('edit-stock-delta').style.display = 'none';
 
-  // Build SKU edit rows from existing SKUs
+  const sub = document.getElementById('edit-subtitle');
+  if (sub) sub.textContent = (r.dispatchId||id.slice(0,10)) + ' — ' + (r.buyer||'') + ' · ' + (r.stage||'');
+
+  // Meta fields
+  const set = (id,v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
+  set('edit-orderType',   r.orderType);
+  set('edit-buyer',       r.buyer);
+  set('edit-dispatchDate',r.dispatchDate);
+  set('edit-vehicleDate', r.vehicleDate);
+  set('edit-vehicle',     r.vehicle);
+  set('edit-payment',     r.payment);
+  set('edit-notes',       r.notes);
+  set('edit-reason-type', '');
+  set('edit-reason-note', '');
+
+  const deltaBox = document.getElementById('edit-stock-delta');
+  if (deltaBox) deltaBox.style.display = 'none';
+
+  // Build SKU rows
   const list = document.getElementById('edit-sku-list');
-  list.innerHTML = '';
-  (r.skus || []).forEach((s, i) => buildEditSkuRow(s, i, list));
+  if (list) {
+    list.innerHTML = '';
+    (r.skus || []).forEach((s, i) => buildEditSkuRow(s, i, list));
+  }
 
   document.getElementById('editOverlay').classList.add('open');
 }
