@@ -289,7 +289,7 @@
 </div>
 
 <!-- ═══ APP SHELL ════════════════════════════════════════════════════ -->
-<div id="appShell">
+<div id="appShell" style="display:none">
   <div class="topbar">
     <div class="topbar-logo">Growe<span>licious</span></div>
     <div class="topbar-div"></div>
@@ -752,6 +752,8 @@
   firebase.initializeApp(firebaseConfig);
   const db      = firebase.firestore();
   const auth    = firebase.auth();
+  // Ensure fastest possible auth persistence
+  try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e) {}
   // Storage disabled (Spark plan) — upgrade to Blaze to enable photo upload
 
 
@@ -873,13 +875,6 @@ let qcPhotosFiles = [];
 // AUTH
 // ════════════════════════════════════════════════════════════════════
 auth.// Fast path — show loading state while auth resolves
-try {
-  if (localStorage.getItem("gl_dispatch_email")) {
-    document.getElementById("loginScreen").style.display = "none";
-    document.getElementById("appShell").style.display = "block";
-  }
-} catch(e) { /* incognito / storage blocked — ignore */ }
-
 onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
@@ -922,7 +917,6 @@ onAuthStateChanged(user => {
         '— Requests awaiting your approval are shown below.'
       }`;
 
-    try{localStorage.setItem('gl_dispatch_email',user.email);}catch(e){}
     listenToRequests();
     listenToQCLogs();
     loadCustomOptions();
@@ -956,7 +950,6 @@ async function doLogin() {
 
 function doLogout() {
   auth.signOut();
-  try{localStorage.removeItem('gl_dispatch_email');}catch(e){}
 }
 
 // ════════════════════════════════════════════════════════════════════
