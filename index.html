@@ -1051,7 +1051,7 @@ function renderPending() {
   // Finance: show enriched customer summary
   if (currentRole === 'Finance Approver') {
     tb.innerHTML = mine.map(r => {
-      const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0)),0);
+      const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg')),0);
       return `<tr>
         <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
         <td style="font-weight:600">${r.buyer||'—'}</td>
@@ -1362,7 +1362,7 @@ function openDetail(id) {
       : '📊 Finance Review — Outstanding, Production Cost & CEO Submission';
 
     // ① Customer summary
-    const revenue = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0),0);
+    const revenue = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg'),0);
     const gstAmt  = (fa.gst==='Yes'||r.approvals?.finance1?.gst==='Yes') ? revenue*0.05 : 0;
     const sumEl   = document.getElementById('d-fin-customer-summary');
     if (sumEl) sumEl.innerHTML =
@@ -1385,7 +1385,7 @@ function openDetail(id) {
         '<th style="padding:6px 8px;text-align:right">Value</th>'+
         '</tr></thead><tbody>'+
         (r.skus||[]).map(s=>{
-          const val=(parseFloat(s.price)||0)*(parseFloat(s.qty)||0);
+          const val=(parseFloat(s.price)||0)*toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
           return '<tr style="border-bottom:1px solid #eee">'+
             '<td style="padding:6px 8px">'+s.product+'</td>'+
             '<td style="padding:6px 8px">'+s.spec+(s.subspec?' / '+s.subspec:'')+'</td>'+
@@ -1464,7 +1464,7 @@ function openDetail(id) {
     if (fa.status==='approved' || fa.status==='hold') {
       finSummary.style.display = 'block';
       const plNum = parseFloat(fa.pl)||0;
-      const exceeded = fa.creditLimit && fa.outstanding && (parseFloat(fa.outstanding)+((r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0)),0))) > parseFloat(fa.creditLimit);
+      const exceeded = fa.creditLimit && fa.outstanding && (parseFloat(fa.outstanding)+((r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg')),0))) > parseFloat(fa.creditLimit);
       finSummary.innerHTML =
         '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px">💼 Finance Review Summary</div>'+
         '<div class="info-grid" style="grid-template-columns:repeat(3,1fr);gap:8px">'+
@@ -1533,7 +1533,7 @@ function updateCreditFlag() {
   const cl  = parseFloat(document.getElementById('d-fin-credit-limit')?.value)||0;
   const out = parseFloat(document.getElementById('d-fin-outstanding')?.value)||0;
   const r   = allRequests.find(x=>x.id===activeReqId);
-  const orderVal = (r?.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0)),0);
+  const orderVal = (r?.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg')),0);
   const el  = document.getElementById('d-fin-credit-flag');
   if (!el) return;
   if (!cl) { el.textContent='—'; el.style.background='#f0f4f8'; el.style.color='var(--slate)'; return; }
