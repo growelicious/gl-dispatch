@@ -306,7 +306,7 @@
       <div class="sidebar-item active" data-action="gotoDash"><span class="icon">📊</span> Dashboard</div>
       <div class="sidebar-item" id="nav-new"><span class="icon">➕</span> New Dispatch Request</div>
       <div class="sidebar-section" style="margin-top:12px">Approvals</div>
-      <div class="sidebar-item" data-view="pending"><span class="icon">⏳</span> Pending Approvals <span class="badge-count" id="pendingCount">0</span></div>
+      
       <div class="sidebar-item" data-view="all-requests"><span class="icon">📋</span> All Requests</div>
       <div class="sidebar-section" style="margin-top:12px">Modules</div>
       <div class="sidebar-item" id="nav-qc" data-view="qc-checks"><span class="icon">🌡️</span> QC Temperature Log</div>
@@ -321,17 +321,16 @@
           <p id="dashDate"></p>
         </div>
         <div class="stats">
-          <div class="stat-card" onclick="showView('all-requests')" style="cursor:pointer" title="View all requests">
-            <div class="label">Total Requests</div><div class="value" id="s-total">—</div><div class="sub">↗ View all</div></div>
-          <div class="stat-card" onclick="showView('pending')" style="cursor:pointer" title="View pending approvals">
-            <div class="label">Pending</div><div class="value" style="color:var(--amber)" id="s-pending">—</div><div class="sub">↗ View pending</div></div>
-          <div class="stat-card" onclick="showView('all-requests')" style="cursor:pointer" title="View approved">
-            <div class="label">Approved</div><div class="value" style="color:var(--green)" id="s-approved">—</div><div class="sub">↗ View all</div></div>
+          <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:var(--amber)" id="s-pending">—</div><div class="sub">Awaiting action</div></div>
+          <div class="stat-card"><div class="label">Approved</div><div class="value" style="color:var(--green)" id="s-approved">—</div><div class="sub">Fully cleared</div></div>
+          <div class="stat-card"><div class="label">Total</div><div class="value" id="s-total">—</div><div class="sub">All requests</div></div>
+          <div class="stat-card"><div class="label">Rejected</div><div class="value" style="color:var(--red)" id="s-rejected">—</div><div class="sub">Needs action</div></div>
         </div>
         <div class="card">
           <div class="card-header">
             <h2>Recent Dispatch Requests</h2>
-            <button class="btn btn-primary btn-sm" data-action="gotoNew">+ New Request</button>
+            <button class="btn btn-ghost btn-sm" onclick="showView('all-requests')" style="font-size:12px">View All ›</button>
+              <button class="btn btn-primary btn-sm" data-action="gotoNew" id="dash-new-btn">+ New Request</button>
           </div>
           <div class="card-body" style="padding:0">
             <table class="tbl">
@@ -471,6 +470,9 @@
 
                         <!-- ═══ PENDING ══════════════════════════════════════════════ -->
       <div id="view-pending" class="view">
+        <div style="padding:14px 20px 0">
+          <button class="btn btn-ghost btn-sm" onclick="showView('dashboard')" style="font-size:13px">← Dashboard</button>
+        </div>
         <div class="page-header"><h1>Pending Approvals</h1><p>Requests awaiting your action</p></div>
         <div id="pendingRoleInfo" class="role-info"></div>
         <div class="card">
@@ -486,11 +488,21 @@
 
       <!-- ═══ ALL REQUESTS ═════════════════════════════════════════ -->
       <div id="view-all-requests" class="view">
-        <div class="page-header"><h1>All Dispatch Requests</h1><p>Complete history</p></div>
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div><h1>All Dispatch Requests</h1><p>Complete history &amp; export</p></div>
+          <button class="btn btn-ghost btn-sm" onclick="showView('dashboard')" style="font-size:13px">← Dashboard</button>
+        </div>
         <div class="card">
-          <div class="card-header">
+          <div class="card-header" style="flex-wrap:wrap;gap:8px">
             <h2>Request Log</h2>
-            <input type="text" placeholder="Search buyer, ID..." style="border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:12.5px;outline:none;width:200px" oninput="filterTable(this.value)">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" id="search-all" placeholder="Search buyer, ID..." style="border:1px solid var(--border);border-radius:7px;padding:6px 10px;font-size:12px;outline:none;width:150px" oninput="renderAllRequests()">
+              <select id="filter-fy" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;min-width:100px"><option value="">All FY</option></select>
+              <select id="filter-status" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:#fff">
+                <option value="">All Status</option><option>pending</option><option>approved</option><option>rejected</option>
+              </select>
+              <button class="btn btn-primary btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+            </div>
           </div>
           <div class="card-body" style="padding:0">
             <table class="tbl">
@@ -581,15 +593,15 @@
         <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
           <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">③ KYC &amp; Compliance <span style="font-size:10px;font-weight:400;color:var(--muted)">(auto-saved per customer)</span></div>
           <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
-            <div class="field"><label>KYC Verified</label>
+            <div class="field"><label>KYC Verified <span style="color:var(--red)">*</span></label>
               <select id="d-fin-kyc"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
-            <div class="field"><label>GST Applicable</label>
+            <div class="field"><label>GST Applicable <span style="color:var(--red)">*</span></label>
               <select id="d-fin-gst"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
-            <div class="field"><label>TCS Applicable</label>
+            <div class="field"><label>TCS Applicable <span style="color:var(--red)">*</span></label>
               <select id="d-fin-tcs"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
-            <div class="field"><label>Credit Limit (₹)</label>
+            <div class="field"><label>Credit Limit (₹) <span style="color:var(--red)">*</span></label>
               <input type="number" id="d-fin-credit-limit" placeholder="e.g. 500000" min="0" step="1000"></div>
-            <div class="field"><label>Customer Outstanding (₹)</label>
+            <div class="field"><label>Customer Outstanding (₹) <span style="color:var(--red)">*</span></label>
               <input type="number" id="d-fin-outstanding" placeholder="e.g. 50000" min="0" step="0.01"></div>
             <div class="field"><label>Credit Limit Exceeded?</label>
               <div id="d-fin-credit-flag" style="padding:8px;border-radius:6px;font-weight:700;font-size:13px;text-align:center;background:#f0f4f8">—</div></div>
@@ -619,7 +631,7 @@
           <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
             <div class="field"><label>Revenue (auto)</label>
               <input type="number" id="d-fin-revenue" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
-            <div class="field"><label>Production Cost / Kg (₹)</label>
+            <div class="field"><label>Production Cost / Kg (₹) <span style="color:var(--red)">*</span></label>
               <input type="number" id="d-fin-prod-cost" placeholder="e.g. 85.00" min="0" step="0.01"></div>
             <div class="field"><label>Logistics Cost / Kg (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">(if GL)</span></label>
               <input type="number" id="d-fin-logistics" placeholder="0" min="0" step="0.01"></div>
@@ -636,7 +648,7 @@
         <!-- ⑥ Finance Comments & Decision -->
         <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
           <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">⑥ Finance Decision</div>
-          <div class="field"><label>Finance Comments</label>
+          <div class="field"><label>Finance Comments <span style="color:var(--red)">*</span></label>
             <textarea id="d-fin-remark" placeholder="Comments for CEO and operations team..." style="min-height:60px"></textarea></div>
           <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-top:8px">
             <div class="field"><label>Decision</label>
@@ -868,11 +880,9 @@ auth.onAuthStateChanged(user => {
 
     // Only Planners can create new requests
     if (!CAN_CREATE.includes(currentRole)) {
-      document.getElementById('nav-new').style.display = 'none';
+      document.getElementById('nav-new').style.display='none';
+      const nb=document.getElementById('dash-new-btn');if(nb)nb.style.display='none';
     }
-    // Hide New Request button in dashboard for non-creators
-    const newReqBtn = document.querySelector('[data-action="gotoNew"]');
-    if (newReqBtn) newReqBtn.style.display = CAN_CREATE.includes(currentRole) ? '' : 'none';
     // QC log only for QC Manager, Dispatch Manager, Planners, CEO
     if (!['QC Manager','Planner','Dispatch Manager','CEO'].includes(currentRole)) {
       document.getElementById('nav-qc').style.display = 'none';
@@ -934,7 +944,6 @@ async function doLogin() {
 
 function doLogout() {
   auth.signOut();
-  showView('dashboard');
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -990,139 +999,6 @@ function fmtTime(ts) {
     return d.toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) +
            ' ' + d.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
   } catch(e) { return '—'; }
-}
-
-
-// ═══════════════════════════════════════════════════════
-// HISTORICAL DATA EXPORT — Financial Year filter + CSV
-// ═══════════════════════════════════════════════════════
-function getFYLabel(date) {
-  // Indian FY: Apr 1 – Mar 31. FY2025-26 = Apr 2025 – Mar 2026
-  const d = date instanceof Date ? date : (date?.toDate ? date.toDate() : new Date(date));
-  if (isNaN(d)) return null;
-  const yr = d.getFullYear(), mo = d.getMonth(); // 0=Jan
-  const fyStart = mo >= 3 ? yr : yr - 1; // April=3
-  return 'FY' + fyStart + '-' + String(fyStart+1).slice(-2);
-}
-
-function populateFYFilter() {
-  const sel = document.getElementById('filter-fy');
-  if (!sel) return;
-  const fys = new Set();
-  allRequests.forEach(r => { const fy = getFYLabel(r.createdAt); if(fy) fys.add(fy); });
-  // Always show last 5 FYs
-  const now = new Date();
-  for (let i = 0; i < 5; i++) {
-    const yr = now.getFullYear() - i;
-    const fy = getFYLabel(new Date(yr, 3, 1)); // Apr 1
-    fys.add(fy);
-  }
-  const sorted = Array.from(fys).sort().reverse();
-  sel.innerHTML = '<option value="">All Years</option>' +
-    sorted.map(f => `<option value="${f}">${f}</option>`).join('');
-}
-
-function getFilteredRequests() {
-  const fy     = document.getElementById('filter-fy')?.value || '';
-  const status = document.getElementById('filter-status')?.value || '';
-  return allRequests.filter(r => {
-    if (status && r.status !== status) return false;
-    if (fy && getFYLabel(r.createdAt) !== fy) return false;
-    return true;
-  });
-}
-
-function exportCSV() {
-  const rows = getFilteredRequests();
-  if (!rows.length) { toast('No data to export', true); return; }
-  const headers = ['Order No','Date','Buyer','Order Type','Dispatch Date','Payment Terms',
-    'Transport','Vehicle Arrangement','Status','Stage','Submitted By',
-    'SKU Count','Total Value (₹)','Finance Decision','Finance P&L (₹)','Finance Margin %'];
-  const lines = [headers.join(',')];
-  rows.forEach(r => {
-    const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
-    const fa = r.approvals?.finance1 || {};
-    const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-IN') : (r.dispatchDate||'');
-    const row = [
-      r.dispatchId||r.id.slice(0,10), dt, r.buyer||'', r.orderType||'',
-      r.dispatchDate||'', r.payment||'', r.transport||'', r.vehicleArrangement||'',
-      r.status||'', (r.stage||'').replace(/,/g,' '), r.submittedBy||'',
-      (r.skus||[]).length, totalVal.toFixed(2),
-      fa.decision||'', fa.pl||'', fa.margin||''
-    ].map(v => '"'+String(v).replace(/"/g,'""')+'"');
-    lines.push(row.join(','));
-  });
-  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  const fy   = document.getElementById('filter-fy')?.value || 'All';
-  a.href = url; a.download = 'GL_Dispatch_'+fy+'_'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click(); URL.revokeObjectURL(url);
-  toast('✓ Exported '+rows.length+' records');
-}
-
-
-// ═══════════════════════════════════════════════════════
-// FINANCE NOTIFICATION — WhatsApp + Email on submission
-// ═══════════════════════════════════════════════════════
-function notifyFinanceTeam(dispatchId, order) {
-  const buyer       = order.buyer || '—';
-  const dispDate    = order.dispatchDate || '—';
-  const payment     = order.payment || '—';
-  const totalVal    = (order.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
-  const skuSummary  = (order.skus||[]).map((s,i)=>{
-    const qKg = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
-    return (i+1)+'. '+s.product+' '+s.spec+(s.subspec?' / '+s.subspec:'')+' — '+qKg.toLocaleString('en-IN')+' Kg @ ₹'+s.price+'/Kg';
-  }).join('%0A');
-
-  const portalUrl   = 'https://growelicious.github.io/gl-dispatch/';
-  const msg =
-    '*GL Dispatch — Finance Review Required*%0A' +
-    '━━━━━━━━━━━━━━━━━━%0A' +
-    '*Order:* '+dispatchId+'%0A' +
-    '*Customer:* '+buyer+'%0A' +
-    '*Dispatch Date:* '+dispDate+'%0A' +
-    '*Payment Terms:* '+payment+'%0A' +
-    '*Order Value:* ₹'+totalVal.toLocaleString('en-IN')+'%0A' +
-    '─────────────────%0A' +
-    '*SKUs:%0A'+skuSummary+'%0A' +
-    '─────────────────%0A' +
-    'Please review and approve/hold at:%0A' +
-    portalUrl + '%0A' +
-    '_Login required — use your registered email_';
-
-  // WhatsApp numbers (finance team)
-  const waNumbers = ['917405331591','919964963994','919655120224'];
-  const waLinks   = waNumbers.map(n => 'https://wa.me/'+n+'?text='+msg);
-
-  // Open WA links with stagger
-  waLinks.forEach((url, i) => {
-    setTimeout(() => { window.open(url, '_blank'); }, i * 800);
-  });
-
-  // Email
-  const emailTo  = 'romanchi@pawfectlymade.com,nazeer.a@growelicious.com,harish.j@growelicious.com';
-  const subject  = encodeURIComponent('GL Dispatch — Finance Review: '+dispatchId+' | '+buyer);
-  const body     = encodeURIComponent(
-    'Finance Review Required\n\n' +
-    'Order: '+dispatchId+'\n' +
-    'Customer: '+buyer+'\n' +
-    'Dispatch Date: '+dispDate+'\n' +
-    'Payment Terms: '+payment+'\n' +
-    'Order Value: ₹'+totalVal.toLocaleString('en-IN')+'\n\n' +
-    'SKUs:\n'+(order.skus||[]).map((s,i)=>{
-      const qKg = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
-      return (i+1)+'. '+s.product+' '+s.spec+(s.subspec?' / '+s.subspec:'')+' — '+qKg.toLocaleString('en-IN')+' Kg @ ₹'+s.price+'/Kg';
-    }).join('\n')+'\n\n' +
-    'Review & Approve/Hold at:\n'+portalUrl+'\n\n' +
-    'Login with your registered email to take action.\n\n' +
-    '— GL Dispatch Portal (Auto-notification)'
-  );
-  setTimeout(() => {
-    window.open('mailto:'+emailTo+'?subject='+subject+'&body='+body, '_self');
-  }, 2500);
-
-  toast('📲 WhatsApp & email notifications sent to Finance team');
 }
 
 function pill(status, label) {
@@ -1220,13 +1096,17 @@ function renderPending() {
 function renderAllRequests() {
   const tb = document.getElementById('allTable');
   if (!tb) return;
-  const rows = getFilteredRequests();
-  if (!rows.length) {
-    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">📋</div><p>No requests found.</p></td></tr>`;
-    return;
-  }
+  const search = (document.getElementById('search-all')?.value||'').toLowerCase();
+  const fy     = document.getElementById('filter-fy')?.value||'';
+  const status = document.getElementById('filter-status')?.value||'';
+  const rows = allRequests.filter(r => {
+    if (status && r.status !== status) return false;
+    if (fy && getFYLabel(r.createdAt) !== fy) return false;
+    if (search && !((r.buyer||'').toLowerCase().includes(search)||(r.dispatchId||'').toLowerCase().includes(search)||(r.orderType||'').toLowerCase().includes(search))) return false;
+    return true;
+  });
+  if (!rows.length) { tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="ei">📋</div><p>No requests found.</p></td></tr>`; return; }
   tb.innerHTML = rows.map(r => {
-    const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
     const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-IN') : (r.dispatchDate||'—');
     return `<tr>
       <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
@@ -1261,1353 +1141,7 @@ function renderQCTable(logs) {
   }).join('');
 }
 
-function filterTable(val) {
-  document.querySelectorAll('#allTable tr').forEach(r => {
-    r.style.display = r.textContent.toLowerCase().includes(val.toLowerCase()) ? '' : 'none';
-  });
-}
-
-// ════════════════════════════════════════════════════════════════════
-// SUBMIT NEW REQUEST
-// ════════════════════════════════════════════════════════════════════
-async function submitRequest() {
-  if (!CAN_CREATE.includes(currentRole)) { toast('Your role cannot create requests', true); return; }
-  const orderType = document.getElementById('f-orderType').value;
-  const buyerSel  = document.getElementById('f-buyer').value;
-  const dispDate  = document.getElementById('f-dispatchDate').value;
-  const transport = document.getElementById('f-transport').value;
-  const payment   = document.getElementById('f-payment').value;
-  if (!orderType||!buyerSel||!dispDate||!transport||!payment) {
-    toast('Please fill all required fields', true); return;
-  }
-  if (payment==='Others'&&!document.getElementById('f-payment-others').value.trim()) {
-    toast('Please specify payment remarks', true); return;
-  }
-  if (buyerSel==='Others'&&!document.getElementById('f-buyer-others').value.trim()) {
-    toast('Please enter the buyer name', true); return;
-  }
-  const skuRows = document.querySelectorAll('.sku-row');
-  if (!skuRows.length) { toast('Please add at least one SKU', true); return; }
-  const skus = [];
-  for (let i=0; i<skuRows.length; i++) {
-    const row=skuRows[i], ps=row.querySelector('.sku-product').value, ss=row.querySelector('.sku-spec').value;
-    const qv=row.querySelector('.sku-qty-val').value.trim(), qu=row.querySelector('.sku-qty-unit').value;
-    if (!ps||!ss||!qv) { toast('Fill Product, Spec and Qty for all SKUs', true); return; }
-    if (ss==='Fillet'&&!row.querySelector('.sku-subspec').value) { toast('Select Sub Spec for Fillet in SKU '+(i+1), true); return; }
-    const product=ps==='Others'?row.querySelector('.sku-product-others').value.trim():ps;
-    const spec=ss==='Others'?row.querySelector('.sku-spec-others').value.trim():ss;
-    if (!product) { toast('Enter product name for SKU '+(i+1), true); return; }
-    if (!spec)    { toast('Enter spec name for SKU '+(i+1), true); return; }
-    if (ps==='Others') saveCustomOption('products', product);
-    if (ss==='Others') saveCustomOption('specs', spec);
-    // Save custom subspec if Others
-    const rawSub=row.querySelector('.sku-subspec').value;
-    if(rawSub==='Others'){ const os=row.querySelector('.sku-subspec-others')?.value.trim(); if(os) saveCustomOption('subspec',os); }
-    const isFillet      = ss==='Fillet'||ss==='Skin on Fillet';
-    const isBasaFillet  = product==='Basa' && isFillet;
-    // Basa Fillet: Sub Spec is required
-    if(isBasaFillet && !row.querySelector('.sku-subspec').value){
-      toast('SKU '+(i+1)+': Sub Spec is required for Basa Fillet', true); return;
-    }
-    // Other fillet specs: Pieces/Kg and Glaze are required
-    if(isFillet && !isBasaFillet){
-      if(!row.querySelector('.sku-pieces').value.trim()){
-        toast('SKU '+(i+1)+': Pieces / Kg is required for '+product+' '+ss, true); return;
-      }
-      if(!row.querySelector('.sku-glaze').value.trim()){
-        toast('SKU '+(i+1)+': Glaze % is required for '+product+' '+ss, true); return;
-      }
-    }
-    // Units: Kg and Cases allowed together (1 Case = 10Kg conversion applied)
-    const sUnit='Cases'; // stock always in Cases
-    const stocksVal=parseFloat(row.querySelector('.sku-stocks').value)||0;
-    const pkgTypeSel=row.querySelector('.sku-pkg-type').value;
-    const pkgType=pkgTypeSel==='Others'?row.querySelector('.sku-pkg-type-others').value.trim():pkgTypeSel;
-    const prodPlan=row.querySelector('.sku-prod-plan').value;
-    const price=row.querySelector('.sku-price').value||'';
-    const glWh=parseFloat(row.querySelector('.sku-stock-gl').value)||0;
-    const cfWh=parseFloat(row.querySelector('.sku-stock-cf').value)||0;
-    if(pkgTypeSel==='Others') saveCustomOption('pkgtype', pkgType);
-    // Save stock snapshot to Firestore for next order auto-fill
-    if(stocksVal>0){
-      // Full SKU key: product|spec|subspec|piecesKg|glaze|pkgType|pkgSpec
-      const subsVal = (()=>{ const sel=row.querySelector('.sku-subspec').value; const oth=row.querySelector('.sku-subspec-others')?.value.trim(); return sel==='Others'?oth:sel; })();
-      const pcsVal  = row.querySelector('.sku-pieces').value;
-      const glzVal  = row.querySelector('.sku-glaze').value;
-      const pktVal  = pkgType;
-      const pksVal  = isFillet ? row.querySelector('.sku-pkg-spec').value : '';
-      const skuKey  = buildSkuKey(product, spec, subsVal, pcsVal, glzVal);
-      // Stock always stored as Cases
-      const stockInCases = sUnit==='Kg' ? stocksVal/KG_PER_CASE : stocksVal;
-      const glInCases    = sUnit==='Kg' ? glWh/KG_PER_CASE : glWh;
-      const cfInCases    = sUnit==='Kg' ? cfWh/KG_PER_CASE : cfWh;
-      const stockKg = stockInCases * KG_PER_CASE;
-      const glKg2   = glInCases   * KG_PER_CASE;
-      const cfKg2   = cfInCases   * KG_PER_CASE;
-      db.collection('sku_stocks').where('key','==',skuKey).get().then(function(snap){
-        const data={
-          key:skuKey, product, spec,
-          subspec:subsVal, piecesKg:pcsVal, glaze:glzVal, pkgType:pktVal, pkgSpec:pksVal,
-          total:stockInCases, unit:'Cases',
-          totalKg:stockKg, glKg:glKg2, cfKg:cfKg2,
-          gl:glWh, cf:cfWh,
-          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          savedBy:currentUser.email
-        };
-        if(snap.empty){ db.collection('sku_stocks').add(data); }
-        else{ snap.docs[0].ref.set(data,{merge:false}); }
-      });
-    }
-    skus.push({product, spec,
-      subspec:  (()=>{ const sel=row.querySelector('.sku-subspec').value; const oth=row.querySelector('.sku-subspec-others')?.value.trim(); return sel==='Others'?oth:sel; })(),
-      piecesKg: row.querySelector('.sku-pieces').value,
-      glaze:    row.querySelector('.sku-glaze').value,
-      pkgType, pkgSpec:isFillet?row.querySelector('.sku-pkg-spec').value:'',
-      price, qty:qv, qtyUnit:qu,
-      stocks:stocksVal, stockUnit:sUnit, glWh, cfWh, productionPlan:prodPlan});
-  }
-  const buyer=buyerSel==='Others'?document.getElementById('f-buyer-others').value.trim():buyerSel;
-  if (buyerSel==='Others') saveCustomOption('buyers', buyer);
-  const payFinal=payment==='Others'?'Others: '+document.getElementById('f-payment-others').value.trim():payment;
-  const btn=document.getElementById('submitBtn');
-  btn.innerHTML='<span class="loading-spinner"></span> Submitting...'; btn.disabled=true;
-  try {
-    const dispatchId='DISP-'+Date.now().toString().slice(-6);
-    await db.collection('dispatch_requests').add({
-      dispatchId, orderType, buyer, dispatchDate:dispDate,
-      vehicleDate:(document.getElementById('f-vehicle-tba')&&document.getElementById('f-vehicle-tba').checked)?'Yet to assign':document.getElementById('f-vehicleDate').value,
-      transport, payment:payFinal, skus,
-      product:skus[0].product, spec:skus[0].spec,
-      location:document.getElementById('f-location').value,
-      notes:document.getElementById('f-notes').value,
-      status:'pending', stage:'Awaiting Finance Review — Outstanding, Production Cost & CEO Submission', notifyFinance:true,
-      submittedBy:currentUser.email, submittedByName:currentRole,
-      createdAt:firebase.firestore.FieldValue.serverTimestamp(),
-      approvals:{
-        finance1:{status:'pending',remark:'',time:null,paymentTerms:'',outstanding:'',outstandingNote:'',productionCost:'',pl:''},
-        ceo:     {status:'pending',remark:'',time:null},
-        gm:      {status:'pending',remark:'',time:null},
-        pm:      {status:'pending',remark:'',time:null},
-        qc:      {status:'pending',remark:'',time:null},
-        finance2:{status:'pending',remark:'',time:null},
-        dispatch:{status:'pending',remark:'',time:null},
-      }
-    });
-    ['f-payment-others','f-buyer-others','f-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-    ['f-orderType','f-buyer','f-transport','f-payment','f-location'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
-    document.getElementById('f-payment-others-wrap').style.display='none';
-    document.getElementById('f-buyer-others-wrap').style.display='none';
-    document.getElementById('sku-list').innerHTML='';
-    skuCounter=0; addSkuRow();
-    showView('dashboard');
-    toast('✓ Request '+dispatchId+' submitted to Finance for review.');
-    notifyFinanceTeam(dispatchId, {
-      buyer, dispatchDate:dispDate, payment:payFinal, skus,
-      vehicleArrangement:vehicleArr
-    });
-  } catch(e){toast('Error: '+e.message,true);}
-  btn.innerHTML='Submit for Approval'; btn.disabled=false;
-}
-
-
-
-// ════════════════════════════════════════════════════════════════════
-// DETAIL MODAL
-// ════════════════════════════════════════════════════════════════════
-function openDetail(id) {
-  const r = allRequests.find(x => x.id === id);
-  if (!r) return;
-  activeReqId = id;
-
-  document.getElementById('d-title').textContent = (r.dispatchId || id.slice(0,10)) + ' — ' + (r.buyer||'');
-  document.getElementById('d-subtitle').innerHTML = `${r.orderType||''} &nbsp;·&nbsp; ${r.dispatchDate||''} &nbsp;·&nbsp; ${pill(r.status)}`;
-
-  // Approval track
-  const trackLabels = ['Finance Review','CEO','GM','PM','QC','Finance Final','Dispatch'];
-  const trackKeys   = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
-  document.getElementById('d-track').innerHTML = trackKeys.map((k,i) => {
-    const a = r.approvals?.[k];
-    const st = a?.status||'pending';
-    const cls = st==='approved'?'done': st==='rejected'?'rejected': (i===trackKeys.findIndex(k2=>r.approvals?.[k2]?.status==='pending')?'active':'');
-    const icon = st==='approved'?'✓': st==='rejected'?'✗': (i+1);
-    return `<div class="track-step ${cls}"><div class="track-dot">${icon}</div><div class="track-label">${trackLabels[i]}</div></div>`;
-  }).join('');
-
-  // Info
-  document.getElementById('d-info').innerHTML = `
-    <div class="info-item"><div class="ilabel">Order Type</div><div class="ivalue">${r.orderType||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Buyer</div><div class="ivalue">${r.buyer||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Dispatch Date</div><div class="ivalue">${r.dispatchDate||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Vehicle Arrival (D-1)</div><div class="ivalue">${r.vehicleDate||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Transport Mode</div><div class="ivalue">${r.transport||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Payment Terms</div><div class="ivalue">${r.payment||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Product</div><div class="ivalue">${r.product||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Spec</div><div class="ivalue">${r.spec||'—'}</div></div>
-    ${r.subspec?`<div class="info-item"><div class="ilabel">Sub Spec</div><div class="ivalue">${r.subspec}</div></div>`:''}
-    ${r.piecesKg?`<div class="info-item"><div class="ilabel">Pieces / Kg</div><div class="ivalue">${r.piecesKg}</div></div>`:''}
-    ${r.glaze?`<div class="info-item"><div class="ilabel">Glaze</div><div class="ivalue">${r.glaze}</div></div>`:''}
-    <div class="info-item"><div class="ilabel">Warehouse</div><div class="ivalue">${r.location||'—'}</div></div>
-    <div class="info-item"><div class="ilabel">Submitted By</div><div class="ivalue">${r.submittedBy||'—'}</div></div>
-    ${r.notes?`<div class="info-item" style="grid-column:span 2"><div class="ilabel">Notes</div><div class="ivalue" style="font-weight:400;font-size:12.5px">${r.notes}</div></div>`:''}
-    ${r.skus&&r.skus.length?`<div class="info-item" style="grid-column:span 2;overflow-x:auto">
-      <div class="ilabel" style="margin-bottom:8px">📦 SKU Items (${r.skus.length})</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:500px">
-        <thead><tr style="background:#f0f4f8">
-          <th style="padding:6px 8px;text-align:left;white-space:nowrap">#</th>
-          <th style="padding:6px 8px;text-align:left;white-space:nowrap">Product</th>
-          <th style="padding:6px 8px;text-align:left;white-space:nowrap">Spec / Sub Spec</th>
-          <th style="padding:6px 8px;text-align:right;white-space:nowrap">Qty (Kg)</th>
-          <th style="padding:6px 8px;text-align:right;white-space:nowrap">Price/Kg</th>
-          <th style="padding:6px 8px;text-align:right;white-space:nowrap">Value</th>
-          <th style="padding:6px 8px;text-align:right;white-space:nowrap">Stock (Cases)</th>
-          <th style="padding:6px 8px;text-align:left;white-space:nowrap">Prod Plan</th>
-        </tr></thead>
-        <tbody>${r.skus.map((s,i)=>{
-          const qtyKg = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
-          const val   = (parseFloat(s.price)||0)*qtyKg;
-          const specFull = [s.spec, s.subspec, s.piecesKg?s.piecesKg+'pcs/kg':'', s.glaze?s.glaze+'%':''].filter(Boolean).join(' · ');
-          return '<tr style="border-bottom:1px solid #f1f5f9">'+
-            '<td style="padding:5px 8px;color:var(--muted)">'+(i+1)+'</td>'+
-            '<td style="padding:5px 8px;font-weight:600">'+(s.product||'-')+'</td>'+
-            '<td style="padding:5px 8px;font-size:11px">'+specFull+'</td>'+
-            '<td style="padding:5px 8px;text-align:right;font-weight:600">'+qtyKg.toLocaleString('en-IN')+'</td>'+
-            '<td style="padding:5px 8px;text-align:right">₹'+(parseFloat(s.price)||0).toLocaleString('en-IN')+'</td>'+
-            '<td style="padding:5px 8px;text-align:right;font-weight:600">₹'+val.toLocaleString('en-IN')+'</td>'+
-            '<td style="padding:5px 8px;text-align:right">'+(s.stocks||'0')+' Cases</td>'+
-            '<td style="padding:5px 8px;font-size:11px;color:'+(s.productionPlan&&s.productionPlan.includes('sufficient')?'var(--green)':'var(--blue)')+'">'+
-              (s.productionPlan||'—')+'</td>'+
-            '</tr>';
-        }).join('')}</tbody>
-        <tfoot><tr style="background:#f8fafc;font-weight:700">
-          <td colspan="5" style="padding:6px 8px;text-align:right">Total Order Value:</td>
-          <td style="padding:6px 8px;text-align:right">₹${r.skus.reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0).toLocaleString('en-IN')}</td>
-          <td colspan="2"></td>
-        </tr></tfoot>
-      </table></div>`:''"
->
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Growelicious — Dispatch Approval Portal</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-
-<!-- Firebase SDKs (compat version — works directly in HTML, no npm needed) -->
-<script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script data-cfasync="false" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<!-- Storage disabled — upgrade to Blaze plan to enable photo upload -->
-
-
-
-<style>
-  :root {
-    --navy:   #0f2540;
-    --blue:   #1a5fa8;
-    --blue2:  #2172c4;
-    --sky:    #e8f2fc;
-    --green:  #0d6e3f;
-    --glt:    #e6f7ee;
-    --red:    #b91c1c;
-    --rlt:    #fef2f2;
-    --amber:  #b45309;
-    --amlt:   #fffbeb;
-    --slate:  #475569;
-    --muted:  #94a3b8;
-    --border: #e2e8f0;
-    --bg:     #f8fafc;
-    --card:   #ffffff;
-    --text:   #0f172a;
-    --radius: 10px;
-    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
-    --shadow-lg: 0 8px 32px rgba(0,0,0,.12);
-  }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
-
-  /* ── LOGIN ── */
-  #loginScreen {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #0f2540 0%, #1a5fa8 100%);
-  }
-  .login-box {
-    background: #fff;
-    border-radius: 16px;
-    padding: 40px 36px;
-    width: 380px;
-    max-width: 95vw;
-    box-shadow: var(--shadow-lg);
-  }
-  .login-logo { font-size: 22px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
-  .login-logo span { color: var(--blue); }
-  .login-sub { font-size: 13px; color: var(--slate); margin-bottom: 28px; }
-  .login-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-  .login-field label { font-size: 12px; font-weight: 600; color: var(--slate); }
-  .login-field input {
-    border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 12px;
-    font-size: 13.5px; font-family: inherit; outline: none; transition: border .15s;
-  }
-  .login-field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,95,168,.1); }
-  .login-btn {
-    width: 100%; padding: 11px; background: var(--blue); color: #fff;
-    border: none; border-radius: 8px; font-size: 14px; font-weight: 700;
-    cursor: pointer; font-family: inherit; margin-top: 6px; transition: background .15s;
-  }
-  .login-btn:hover { background: var(--blue2); }
-  .login-err { color: var(--red); font-size: 12px; margin-top: 8px; text-align: center; min-height: 18px; }
-  .login-hint { margin-top: 20px; padding: 12px; background: var(--sky); border-radius: 8px; font-size: 11.5px; color: var(--slate); }
-  .login-hint b { color: var(--navy); display: block; margin-bottom: 4px; }
-
-  /* ── APP SHELL ── */
-  #appShell { display: none; }
-  .topbar {
-    background: var(--navy); height: 54px; display: flex; align-items: center;
-    padding: 0 24px; gap: 14px; position: sticky; top: 0; z-index: 100;
-    box-shadow: 0 2px 12px rgba(0,0,0,.18);
-  }
-  .topbar-logo { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: .04em; text-transform: uppercase; }
-  .topbar-logo span { color: #5aadff; }
-  .topbar-div { width: 1px; height: 20px; background: rgba(255,255,255,.15); }
-  .topbar-title { font-size: 13px; color: rgba(255,255,255,.7); }
-  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-  .user-pill {
-    background: rgba(255,255,255,.12); color: #fff; border-radius: 20px;
-    padding: 3px 12px; font-size: 11.5px; font-weight: 500;
-    border: 1px solid rgba(255,255,255,.18);
-  }
-  .logout-btn {
-    background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.2);
-    border-radius: 7px; padding: 4px 11px; font-size: 11.5px; cursor: pointer;
-    font-family: inherit; transition: background .15s;
-  }
-  .logout-btn:hover { background: rgba(255,255,255,.2); }
-
-  .layout { display: flex; min-height: calc(100vh - 54px); }
-  .sidebar {
-    width: 220px; background: var(--card); border-right: 1px solid var(--border);
-    padding: 20px 0; flex-shrink: 0; position: sticky; top: 54px;
-    height: calc(100vh - 54px); overflow-y: auto;
-  }
-  .sidebar-section { padding: 6px 16px 2px; font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-  .sidebar-item {
-    display: flex; align-items: center; gap: 9px; padding: 8px 16px;
-    font-size: 13px; color: var(--slate); cursor: pointer;
-    border-left: 3px solid transparent; transition: all .15s; font-weight: 500;
-  }
-  .sidebar-item:hover { background: var(--sky); color: var(--blue); }
-  .sidebar-item.active { background: var(--sky); color: var(--blue); border-left-color: var(--blue); }
-  .sidebar-item .icon { font-size: 15px; width: 18px; text-align: center; }
-  .badge-count { margin-left: auto; background: var(--red); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 10.5px; font-weight: 700; }
-
-  .main { flex: 1; padding: 24px; overflow-y: auto; }
-  .view { display: none; }
-  .view.active { display: block; }
-
-  .page-header { margin-bottom: 20px; }
-  .page-header h1 { font-size: 20px; font-weight: 700; color: var(--navy); }
-  .page-header p { font-size: 13px; color: var(--slate); margin-top: 2px; }
-
-  .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
-  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
-  .stat-card .label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .stat-card .value { font-size: 26px; font-weight: 700; color: var(--navy); margin-top: 4px; font-family: 'DM Mono', monospace; }
-  .stat-card .sub { font-size: 11.5px; color: var(--slate); margin-top: 2px; }
-
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
-  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); background: #fafbfc; }
-  .card-header h2 { font-size: 14px; font-weight: 700; color: var(--navy); }
-  .card-body { padding: 18px; }
-
-  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .tbl th { text-align: left; padding: 9px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); background: #f8fafc; }
-  .tbl td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-  .tbl tr:last-child td { border-bottom: none; }
-  .tbl tr:hover td { background: #f8fafc; }
-
-  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-  .pill::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.7; }
-  .pill-pending  { background: var(--amlt); color: var(--amber); }
-  .pill-approved { background: var(--glt);  color: var(--green); }
-  .pill-rejected { background: var(--rlt);  color: var(--red);   }
-  .pill-draft    { background: #f1f5f9;     color: var(--slate); }
-
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all .15s; border: none; font-family: inherit; }
-  .btn-primary { background: var(--blue); color: #fff; }
-  .btn-primary:hover { background: var(--blue2); transform: translateY(-1px); }
-  .btn-green { background: var(--green); color: #fff; }
-  .btn-green:hover { background: #0a5930; }
-  .btn-red { background: var(--red); color: #fff; }
-  .btn-red:hover { background: #991b1b; }
-  .btn-ghost { background: transparent; color: var(--slate); border: 1px solid var(--border); }
-  .btn-ghost:hover { background: var(--sky); color: var(--blue); }
-  .btn-sm { padding: 5px 10px; font-size: 11.5px; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .form-grid.cols3 { grid-template-columns: 1fr 1fr 1fr; }
-  .form-grid.cols1 { grid-template-columns: 1fr; }
-  .field { display: flex; flex-direction: column; gap: 5px; }
-  .field label { font-size: 12px; font-weight: 600; color: var(--slate); }
-  .field input, .field select, .field textarea { border: 1.5px solid var(--border); border-radius: 7px; padding: 8px 11px; font-size: 13px; font-family: inherit; color: var(--text); background: #fff; transition: border .15s; outline: none; }
-  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,95,168,.1); }
-  .field textarea { min-height: 72px; resize: vertical; }
-
-  .section-divider { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 20px 0 10px; display: flex; align-items: center; gap: 10px; }
-  .section-divider::after { content:''; flex:1; height:1px; background: var(--border); }
-
-  /* Modal */
-  .detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; backdrop-filter: blur(3px); }
-  .detail-overlay.open { display: flex; align-items: center; justify-content: center; animation: fadeIn .2s ease; }
-  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-  .detail-panel { background: #fff; border-radius: 14px; width: 660px; max-width: 95vw; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg); animation: slideUp .25s ease; }
-  @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
-  .detail-header { padding: 20px 22px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; position: sticky; top: 0; background: #fff; z-index: 2; }
-  .detail-header h3 { font-size: 16px; font-weight: 700; color: var(--navy); }
-  .detail-header p { font-size: 12px; color: var(--slate); margin-top: 2px; }
-  .close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--muted); padding: 0 4px; border-radius: 6px; }
-  .close-btn:hover { background: var(--bg); color: var(--text); }
-  .detail-body { padding: 20px 22px; }
-
-  .approval-track { display: flex; gap: 0; margin: 16px 0; }
-  .track-step { flex:1; display:flex; flex-direction:column; align-items:center; position:relative; }
-  .track-step:not(:last-child)::after { content:''; position:absolute; top:15px; left:50%; width:100%; height:2px; background:var(--border); z-index:0; }
-  .track-step.done:not(:last-child)::after { background: var(--green); }
-  .track-dot { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; z-index:1; font-weight:700; border:3px solid var(--border); background:#fff; }
-  .track-step.done .track-dot { background:var(--green); color:#fff; border-color:var(--green); }
-  .track-step.active .track-dot { background:var(--blue); color:#fff; border-color:var(--blue); box-shadow:0 0 0 4px rgba(26,95,168,.15); }
-  .track-step.rejected .track-dot { background:var(--red); color:#fff; border-color:var(--red); }
-  .track-label { font-size:10px; font-weight:600; color:var(--muted); margin-top:6px; text-align:center; }
-  .track-step.done .track-label, .track-step.active .track-label { color:var(--text); }
-
-  .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
-  .info-item .ilabel { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-  .info-item .ivalue { font-size:13.5px; font-weight:600; color:var(--text); margin-top:2px; }
-
-  .approve-actions { display:flex; gap:10px; padding:16px 0 0; border-top:1px solid var(--border); margin-top:16px; flex-wrap:wrap; }
-
-  .timeline { list-style:none; position:relative; padding-left:20px; }
-  .timeline::before { content:''; position:absolute; left:6px; top:8px; bottom:8px; width:2px; background:var(--border); }
-  .timeline li { position:relative; padding:0 0 14px 18px; }
-  .timeline li::before { content:''; position:absolute; left:-14px; top:5px; width:10px; height:10px; border-radius:50%; background:var(--border); border:2px solid #fff; box-shadow:0 0 0 1.5px var(--border); }
-  .timeline li.done::before { background:var(--green); box-shadow:0 0 0 1.5px var(--green); }
-  .timeline li.rejected::before { background:var(--red); box-shadow:0 0 0 1.5px var(--red); }
-  .timeline li.pending::before { background:var(--amber); box-shadow:0 0 0 1.5px var(--amber); }
-  .tl-who { font-size:12.5px; font-weight:700; color:var(--text); }
-  .tl-role { font-size:11px; color:var(--muted); }
-  .tl-note { font-size:12px; color:var(--slate); margin-top:2px; font-style:italic; }
-  .tl-time { font-size:10.5px; color:var(--muted); font-family:'DM Mono',monospace; margin-top:1px; }
-
-  .toast { position:fixed; bottom:24px; right:24px; background:var(--navy); color:#fff; padding:12px 18px; border-radius:10px; font-size:13px; font-weight:500; box-shadow:var(--shadow-lg); z-index:999; display:none; max-width:320px; animation:toastIn .3s ease; }
-  @keyframes toastIn { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
-
-  .tag { display:inline-block; padding:2px 8px; border-radius:5px; font-size:11px; font-weight:700; background:var(--sky); color:var(--blue); text-transform:uppercase; letter-spacing:.04em; }
-
-  .upload-area { border:2px dashed var(--border); border-radius:8px; padding:20px; text-align:center; color:var(--muted); font-size:12.5px; cursor:pointer; transition:all .15s; }
-  .upload-area:hover { border-color:var(--blue); color:var(--blue); background:var(--sky); }
-  .upload-area .up-icon { font-size:24px; margin-bottom:6px; }
-
-  .upload-preview { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  .upload-preview img { width:70px; height:70px; object-fit:cover; border-radius:6px; border:1px solid var(--border); }
-  .upload-preview .up-name { font-size:10px; color:var(--muted); text-align:center; max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-  .loading-spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; }
-  @keyframes spin { to{transform:rotate(360deg)} }
-
-  .empty { text-align:center; padding:40px; color:var(--muted); }
-  .empty .ei { font-size:36px; margin-bottom:10px; }
-
-  .role-info { background:var(--sky); border:1px solid #bee3f8; border-radius:8px; padding:10px 14px; font-size:12px; color:var(--blue); margin-bottom:16px; }
-  .role-info b { display:block; margin-bottom:2px; color:var(--navy); }
-
-  @media(max-width:768px) {
-    .sidebar { display:none; }
-    .stats { grid-template-columns:1fr 1fr; }
-    .form-grid { grid-template-columns:1fr; }
-    .form-grid.cols3 { grid-template-columns:1fr; }
-    .info-grid { grid-template-columns:1fr; }
-  }
-
-.sku-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:2px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px}
-.sku-row{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;position:relative}
-.sku-row .sku-num{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
-.sku-remove{position:absolute;top:10px;right:12px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted);line-height:1;padding:2px 5px;border-radius:4px}
-.sku-remove:hover{background:var(--rlt);color:var(--red)}
-.sku-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.sku-grid .field{margin:0}
-.sku-fillet{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
-.sku-fillet-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-@media(max-width:768px){.sku-grid,.sku-fillet-grid{grid-template-columns:1fr 1fr}}
-
-</style>
-</head>
-<body>
-
-<!-- ═══ LOGIN SCREEN ════════════════════════════════════════════════ -->
-<div id="loginScreen">
-  <div class="login-box">
-    <div class="login-logo">Growe<span>licious</span></div>
-    <div class="login-sub">Dispatch Approval Portal — Sign In</div>
-    <div class="login-field">
-      <label>Email Address</label>
-      <input type="email" id="loginEmail" placeholder="Enter your email address">
-    </div>
-    <div class="login-field">
-      <label>Password</label>
-      <input type="password" id="loginPass" placeholder="••••••••">
-    </div>
-    <div class="login-err" id="loginErr"></div>
-    <button class="login-btn" id="loginBtn" data-action="login">Sign In →</button>
-    <div class="login-hint">
-      <b>👥 GL Dispatch Team:</b>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5830392a312b307632183f2a372f3d34313b31372d2b763b3735">[email&#160;protected]</a> — Dispatch Manager + Planner<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="8ce7e3e9e0ccebfee3fbe9e0e5efe5e3f9ffa2efe3e1">[email&#160;protected]</a> — Planner / Order Entry<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6c1c1e0d1a090902010d18040d020b052c00050f0503191f420f0301">[email&#160;protected]</a> — Production Manager<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e6958f9087c895c884a681948991838a8f858f899395c885898b">[email&#160;protected]</a> — General Manager<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="573038273e3936233f1730253820323b3e343e3822247934383a">[email&#160;protected]</a> — QC Manager<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e5888a8d848bcb8e978c968d8b84a582978a9280898c868c8a9096cb868a88">[email&#160;protected]</a> — Finance Approver<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2457454e4d504c64484d474d4b51570a474b49">[email&#160;protected]</a> — CEO (View + Edit)<br>
-      <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="dfb3beb3b6abf1ac9fb8adb0a8bab3b6bcb6b0aaacf1bcb0b2">[email&#160;protected]</a> — Sales Head (View only)
-    </div>
-  </div>
-</div>
-
-<!-- ═══ APP SHELL ════════════════════════════════════════════════════ -->
-<div id="appShell">
-  <div class="topbar">
-    <div class="topbar-logo">Growe<span>licious</span></div>
-    <div class="topbar-div"></div>
-    <div class="topbar-title">Dispatch Approval Portal</div>
-    <div class="topbar-right">
-      <div class="user-pill">👤 <span id="userRoleLabel">—</span></div>
-      <button class="logout-btn" data-action="logout">Sign Out</button>
-    </div>
-  </div>
-
-  <div class="layout">
-    <nav class="sidebar">
-      <div class="sidebar-section">Main</div>
-      <div class="sidebar-item active" data-action="gotoDash"><span class="icon">📊</span> Dashboard</div>
-      <div class="sidebar-item" id="nav-new"><span class="icon">➕</span> New Dispatch Request</div>
-      <div class="sidebar-section" style="margin-top:12px">Approvals</div>
-      <div class="sidebar-item" data-view="pending"><span class="icon">⏳</span> Pending Approvals <span class="badge-count" id="pendingCount">0</span></div>
-      <div class="sidebar-item" data-view="all-requests"><span class="icon">📋</span> All Requests</div>
-      <div class="sidebar-section" style="margin-top:12px">Modules</div>
-      <div class="sidebar-item" id="nav-qc" data-view="qc-checks"><span class="icon">🌡️</span> QC Temperature Log</div>
-    </nav>
-
-    <main class="main">
-
-      <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
-      <div id="view-dashboard" class="view active">
-        <div class="page-header">
-          <h1>Dashboard</h1>
-          <p id="dashDate"></p>
-        </div>
-        <div class="stats">
-          <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:var(--amber)" id="s-pending">—</div><div class="sub">Awaiting action</div></div>
-          <div class="stat-card"><div class="label">Approved</div><div class="value" style="color:var(--green)" id="s-approved">—</div><div class="sub">Fully cleared</div></div>
-          <div class="stat-card"><div class="label">Total</div><div class="value" id="s-total">—</div><div class="sub">All requests</div></div>
-          <div class="stat-card"><div class="label">Rejected</div><div class="value" style="color:var(--red)" id="s-rejected">—</div><div class="sub">Needs action</div></div>
-        </div>
-        <div class="card">
-          <div class="card-header">
-            <h2>Recent Dispatch Requests</h2>
-            <button class="btn btn-primary btn-sm" data-action="gotoNew">+ New Request</button>
-          </div>
-          <div class="card-body" style="padding:0">
-            <table class="tbl">
-              <thead><tr><th>ID</th><th>Order Type</th><th>Buyer</th><th>Dispatch Date</th><th>Stage</th><th>Status</th><th>Action</th></tr></thead>
-              <tbody id="dashboardTable"><tr><td colspan="7" class="empty"><div class="ei">⏳</div><p>Loading...</p></td></tr></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ NEW REQUEST ══════════════════════════════════════════ -->
-      <div id="view-new-request" class="view">
-        <div class="page-header">
-          <h1>New Dispatch Request</h1>
-          <p id="f-order-id-display" style="font-family:'DM Mono',monospace;font-size:13px;color:var(--blue);font-weight:600"></p>
-        </div>
-        <div class="card">
-          <div class="card-header"><h2>Order Details</h2></div>
-          <div class="card-body">
-            <div class="section-divider">Basic Information</div>
-            <div class="form-grid">
-              <div class="field"><label>Order Type *</label>
-                <select id="f-orderType">
-                  <option value="">— Select —</option>
-                  <option>Super Distributor Order</option>
-                  <option>Internal Stock Transfer</option>
-                  <option>Retail Order</option>
-                  <option>Export</option>
-                </select>
-              </div>
-              <div class="field"><label>Buyer *</label>
-                <select id="f-buyer">
-                  <option value="">— Select Buyer —</option>
-                  <option>A K Enterprises</option>
-                  <option>ABAD FISHERIES PRIVATE LIMITED</option>
-                  <option>Annapurna Caterers</option>
-                  <option>BARBEQUE-NATION HOSPITALITY LIMITED-TN</option>
-                  <option>BARBEQUE-NATION HOSPITALITY LIMITED-TS</option>
-                  <option>BARBEQUE-NATION HOSPITALITY LIMITED-WB</option>
-                  <option>BMS ENTERPRISES</option>
-                  <option>Empire Foods Bangalore</option>
-                  <option>Empire Foods Hyderabad</option>
-                  <option>Growelicious (Karnataka)</option>
-                  <option>Growelicious (Maharashtra)</option>
-                  <option>Growelicious Private Limited (AP)</option>
-                  <option>INFIFRESH FOODS LIMITED</option>
-                  <option>KAJAL MALLICK</option>
-                  <option>M/s. A R ENTERPRISES</option>
-                  <option>M/S. RAY AND COMPANY</option>
-                  <option>M/S. ERAM SEA FOODS</option>
-                  <option>Maa Nachinda Enterprise</option>
-                  <option>MACHE VAATE PRIVATE LIMITED</option>
-                  <option>NAVARATNA ENTERPRISES</option>
-                  <option>Numair International Private Limited</option>
-                  <option>POOJA PROMOTERS</option>
-                  <option>SAFA TRADING</option>
-                  <option>Sats Food Solutions India Private Limited</option>
-                  <option>Seahawks Traders</option>
-                  <option>SRI TULASI AGENCIES (TEL)</option>
-                  <option>SUBRAHMANYAM FISH MART</option>
-                  <option>SUFIYAN TRADERS</option>
-                  <option>SUMMIT MARINE EXPORTS PRIVATE LIMITED</option>
-                  <option>Sunriser</option>
-                  <option>UNITED FOODBRANDS LIMITED (BLR)</option>
-                  <option>UNITED FOODBRANDS LIMITED (HR)</option>
-                  <option>Vridhi Techno Farms Pvt Ltd</option>
-                  <option>WOW MOMO SALES PRIVATE LIMITED (DEL)</option>
-                  <option>Zomato Hyperpure Private Limited</option>
-                  <option>Others</option>
-                </select>
-              </div>
-              <div class="field" id="f-buyer-others-wrap" style="display:none">
-                <label>New Buyer Name *</label>
-                <input type="text" id="f-buyer-others" placeholder="Enter buyer name">
-              </div>
-              <div class="field"><label>Expected Dispatch Date *</label>
-                <input type="date" id="f-dispatchDate">
-              </div>
-              <div class="field"><label>Vehicle Arrival Date (D-1)</label>
-                <input type="date" id="f-vehicleDate" placeholder="Auto D-1">
-                <div style="margin-top:5px">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;cursor:pointer">
-                    <input type="checkbox" id="f-vehicle-tba" style="width:14px;height:14px">
-                    Yet to assign
-                  </label>
-                </div>
-              </div>
-              <div class="field"><label>Vehicle Arrangement</label>
-                <select id="f-vehicle-arrangement">
-                  <option value="">— Select —</option>
-                  <option>Buyer</option>
-                  <option>GL</option>
-                </select>
-              </div>
-              <div class="field" id="f-logistics-cost-wrap" style="display:none"><label>Logistics Cost / Kg (₹)</label>
-                <input type="number" id="f-logistics-cost" placeholder="e.g. 12.50" min="0" step="0.01">
-              </div>
-              <div class="field"><label>Transport Mode *</label>
-                <select id="f-transport">
-                  <option value="">— Select —</option>
-                  <option>Reefer Truck</option><option>Ship</option><option>Train</option>
-                </select>
-              </div>
-              <div class="field"><label>Payment Terms *</label>
-                <select id="f-payment">
-                  <option value="">— Select —</option>
-                  <option>Advance</option><option>Credit</option>
-                  <option>Payment After Loading</option><option>Others</option>
-                </select>
-              </div>
-              <div class="field" id="f-payment-others-wrap" style="display:none">
-                <label>Payment Remarks *</label>
-                <input type="text" id="f-payment-others" placeholder="Specify payment terms...">
-              </div>
-            </div>
-            <div class="section-divider" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">
-              <span>📦 SKU Line Items</span>
-              <button type="button" class="btn btn-primary btn-sm" id="addSkuBtn">+ Add SKU</button>
-            </div>
-            <div id="sku-list"></div>
-            <div class="section-divider">Shipment</div>
-            <div class="form-grid">
-              <div class="field"><label>Warehouse</label>
-                <select id="f-location"><option>GL Warehouse</option><option>CF Warehouse</option></select>
-              </div>
-              <div class="field"><label>Notes</label>
-                <textarea id="f-notes" placeholder="Any special instructions..." style="min-height:44px"></textarea>
-              </div>
-            </div>
-            <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-              <button class="btn btn-primary" id="submitBtn" data-action="submitRequest">Submit for Approval</button>
-              <button class="btn btn-ghost" data-action="gotoDash">Cancel</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-                        <!-- ═══ PENDING ══════════════════════════════════════════════ -->
-      <div id="view-pending" class="view">
-        <div class="page-header"><h1>Pending Approvals</h1><p>Requests awaiting your action</p></div>
-        <div id="pendingRoleInfo" class="role-info"></div>
-        <div class="card">
-          <div class="card-header"><h2>Action Required</h2></div>
-          <div class="card-body" style="padding:0">
-            <table class="tbl">
-              <thead><tr><th>ID</th><th>Buyer</th><th>Dispatch Date</th><th>Stage</th><th>Submitted</th><th>Action</th></tr></thead>
-              <tbody id="pendingTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ ALL REQUESTS ═════════════════════════════════════════ -->
-      <div id="view-all-requests" class="view">
-        <div class="page-header"><h1>All Dispatch Requests</h1><p>Complete history</p></div>
-        <div class="card">
-          <div class="card-header">
-            <h2>Request Log</h2>
-            <input type="text" placeholder="Search buyer, ID..." style="border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:12.5px;outline:none;width:200px" oninput="filterTable(this.value)">
-          </div>
-          <div class="card-body" style="padding:0">
-            <table class="tbl">
-              <thead><tr><th>ID</th><th>Order Type</th><th>Buyer</th><th>Dispatch Date</th><th>Payment</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
-              <tbody id="allTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ═══ QC LOG ════════════════════════════════════════════════ -->
-      <div id="view-qc-checks" class="view">
-        <div class="page-header"><h1>QC Temperature Log</h1><p>Record temperature readings and upload photos</p></div>
-        <div class="card">
-          <div class="card-header"><h2>Log New Reading</h2></div>
-          <div class="card-body">
-            <div class="form-grid">
-              <div class="field"><label>Dispatch Request ID *</label><input type="text" id="qc-reqId" placeholder="DISP-..."></div>
-              <div class="field"><label>Vehicle Number</label><input type="text" id="qc-vehicle" placeholder="MH12AB1234"></div>
-              <div class="field"><label>Vehicle Temperature (°C) *</label><input type="number" id="qc-vtemp" placeholder="-18" step="0.1"></div>
-              <div class="field"><label>Product Temperature (°C) *</label><input type="number" id="qc-ptemp" placeholder="-18" step="0.1"></div>
-              <div class="field"><label>QC Officer Name</label><input type="text" id="qc-officer" placeholder="Name"></div>
-              <div class="field"><label>Clearance Status</label>
-                <select id="qc-status">
-                  <option>Cleared for Loading</option>
-                  <option>Not Cleared — Vehicle Temp High</option>
-                  <option>Not Cleared — Product Temp High</option>
-                </select>
-              </div>
-            </div>
-            <div class="field" style="margin-top:12px"><label>Remarks</label><textarea id="qc-remark" placeholder="Observations..."></textarea></div>
-            <div class="section-divider">Photo Upload</div>
-            <div class="upload-area" style="opacity:.5;cursor:not-allowed;background:#f8fafc">
-              <div class="up-icon">📷</div>
-              <div>Photo upload — requires Firebase Blaze plan</div>
-              <div style="font-size:11px;margin-top:3px">Upgrade your Firebase project to enable photo uploads</div>
-            </div>
-            <button class="btn btn-primary" style="margin-top:14px" id="qcSubmitBtn" data-action="submitQC">✓ Submit QC Reading</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><h2>QC Log History</h2></div>
-          <div class="card-body" style="padding:0">
-            <table class="tbl">
-              <thead><tr><th>Req ID</th><th>Vehicle</th><th>Vehicle °C</th><th>Product °C</th><th>Status</th><th>Officer</th><th>Photos</th><th>Time</th></tr></thead>
-              <tbody id="qcTable"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-    </main>
-  </div>
-</div>
-
-<!-- ═══ DETAIL MODAL ════════════════════════════════════════════════ -->
-<div class="detail-overlay" id="detailOverlay" data-action="overlayDetail">
-  <div class="detail-panel" data-stop="true">
-    <div class="detail-header">
-      <div><h3 id="d-title"></h3><p id="d-subtitle"></p></div>
-      <button class="close-btn" data-action="closeDetail">×</button>
-    </div>
-    <div class="detail-body">
-      <div class="approval-track" id="d-track"></div>
-      <div class="info-grid" id="d-info"></div>
-      <div id="d-finance-summary" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;margin:12px 0"></div>
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px">Activity Log</div>
-      <ul class="timeline" id="d-timeline"></ul>
-      <!-- Finance-specific review panel (shown only to Finance Approver on pending finance step) -->
-      <div id="d-finance-panel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:12px">
-
-        <!-- ① Customer Summary -->
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:14px" class="fin-panel-title">📊 Finance Review — Customer Outstanding, Production Cost &amp; CEO Submission</div>
-
-        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">① Customer &amp; Trade Summary</div>
-          <div class="info-grid" style="grid-template-columns:repeat(3,1fr);gap:10px" id="d-fin-customer-summary"></div>
-        </div>
-
-        <!-- ② SKU Table -->
-        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">② SKU / Proforma Invoice</div>
-          <div id="d-fin-sku-table"></div>
-          <div id="d-fin-invoice-total" style="text-align:right;font-weight:700;font-size:14px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
-        </div>
-
-        <!-- ③ Customer KYC / Compliance (memory-backed) -->
-        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">③ KYC &amp; Compliance <span style="font-size:10px;font-weight:400;color:var(--muted)">(auto-saved per customer)</span></div>
-          <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
-            <div class="field"><label>KYC Verified</label>
-              <select id="d-fin-kyc"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
-            <div class="field"><label>GST Applicable</label>
-              <select id="d-fin-gst"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
-            <div class="field"><label>TCS Applicable</label>
-              <select id="d-fin-tcs"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
-            <div class="field"><label>Credit Limit (₹)</label>
-              <input type="number" id="d-fin-credit-limit" placeholder="e.g. 500000" min="0" step="1000"></div>
-            <div class="field"><label>Customer Outstanding (₹)</label>
-              <input type="number" id="d-fin-outstanding" placeholder="e.g. 50000" min="0" step="0.01"></div>
-            <div class="field"><label>Credit Limit Exceeded?</label>
-              <div id="d-fin-credit-flag" style="padding:8px;border-radius:6px;font-weight:700;font-size:13px;text-align:center;background:#f0f4f8">—</div></div>
-          </div>
-          <div class="field" style="margin-top:4px"><label>Outstanding / KYC Notes</label>
-            <textarea id="d-fin-outstanding-note" placeholder="Notes on outstanding balance, KYC status, dues..." style="min-height:48px"></textarea></div>
-        </div>
-
-        <!-- ④ Payment Terms -->
-        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">④ Payment Terms</div>
-          <div class="form-grid" style="grid-template-columns:1fr 1fr">
-            <div class="field"><label>Planner's Terms <span style="font-weight:400;font-size:11px;color:var(--muted)">(from order)</span></label>
-              <div id="d-fin-planner-payment" style="padding:8px;background:#f0f4f8;border-radius:6px;font-size:13px">—</div></div>
-            <div class="field"><label>Finance — Approve / Modify</label>
-              <select id="d-fin-payment-sel">
-                <option value="">— Approve existing —</option>
-                <option>Advance</option><option>Credit</option><option>Payment After Loading</option><option>Others</option>
-              </select>
-              <input type="text" id="d-fin-payment-text" placeholder="Add note or specify terms..." style="margin-top:6px"></div>
-          </div>
-        </div>
-
-        <!-- ⑤ P&L -->
-        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">⑤ P&amp;L Calculation</div>
-          <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
-            <div class="field"><label>Revenue (auto)</label>
-              <input type="number" id="d-fin-revenue" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
-            <div class="field"><label>Production Cost / Kg (₹)</label>
-              <input type="number" id="d-fin-prod-cost" placeholder="e.g. 85.00" min="0" step="0.01"></div>
-            <div class="field"><label>Logistics Cost / Kg (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">(if GL)</span></label>
-              <input type="number" id="d-fin-logistics" placeholder="0" min="0" step="0.01"></div>
-            <div class="field"><label>Total Cost (auto)</label>
-              <input type="number" id="d-fin-total-cost" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
-            <div class="field"><label>Trade P&amp;L (₹)</label>
-              <input type="number" id="d-fin-pl" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
-            <div class="field"><label>Margin %</label>
-              <input type="number" id="d-fin-margin" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
-          </div>
-          <div id="d-fin-pl-auto" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
-        </div>
-
-        <!-- ⑥ Finance Comments & Decision -->
-        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">⑥ Finance Decision</div>
-          <div class="field"><label>Finance Comments</label>
-            <textarea id="d-fin-remark" placeholder="Comments for CEO and operations team..." style="min-height:60px"></textarea></div>
-          <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-top:8px">
-            <div class="field"><label>Decision</label>
-              <select id="d-fin-decision">
-                <option value="approved">✅ Approved — Submit to CEO</option>
-                <option value="hold">⏸ Hold</option>
-              </select></div>
-            <div class="field" id="d-fin-hold-wrap" style="display:none"><label>Hold Reason</label>
-              <select id="d-fin-hold-reason">
-                <option value="">— Select reason —</option>
-                <option>KYC Pending</option>
-                <option>Credit Limit Exceeded</option>
-                <option>Outstanding Payment Overdue</option>
-                <option>Others</option>
-              </select></div>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-          <button class="btn btn-primary" id="d-fin-submit-btn" data-action="financeSubmit">Submit to CEO →</button>
-          <button class="btn btn-red btn-sm" id="d-fin-reject-btn" data-action="financeReject">✗ Return / Query</button>
-        </div>
-      </div>
-
-      <!-- Standard approve/reject for other roles -->
-      <div class="approve-actions" id="d-actions">
-        <div style="flex:1"><div class="field"><label>Remark</label><input type="text" id="d-remark" placeholder="Add a note..."></div></div>
-        <button class="btn btn-green" id="d-approve-btn" data-action="approve">✓ Approve</button>
-        <button class="btn btn-red" id="d-reject-btn" data-action="reject">✗ Reject</button>
-      </div>
-
-      <!-- Planner withdraw / CEO modify panel -->
-      <div id="d-planner-actions" style="display:none;margin-top:12px;padding:14px;background:#fff8f0;border:1px solid #fde68a;border-radius:8px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--amber);margin-bottom:10px" id="d-planner-actions-title">📝 Planner Actions</div>
-        <div class="field"><label>Reason / Modification Note <span style="color:var(--red)">*</span></label>
-          <textarea id="d-withdraw-remark" placeholder="Reason for withdrawal or modification details..." style="min-height:54px"></textarea>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" id="d-edit-from-detail-btn" data-action="editFromDetail">✏️ Modify Order</button>
-          <button class="btn btn-red btn-sm" id="d-withdraw-btn" data-action="withdrawOrder">🗑 Withdraw Order</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ EDIT MODAL ══════════════════════════════════════════════════ -->
-<div class="detail-overlay" id="editOverlay" data-action="overlayEdit">
-  <div class="detail-panel" data-stop="true" style="width:560px">
-    <div class="detail-header">
-      <div><h3>Edit Dispatch Request</h3><p id="edit-subtitle"></p></div>
-      <button class="close-btn" data-action="closeEdit">×</button>
-    </div>
-    <div class="detail-body">
-      <div class="form-grid">
-        <div class="field"><label>Order Type</label>
-          <select id="edit-orderType">
-            <option>Super Distributor Order</option>
-            <option>Internal Stock Transfer</option>
-            <option>Retail Order (Train)</option>
-          </select>
-        </div>
-        <div class="field"><label>Buyer / Distributor</label><input type="text" id="edit-buyer"></div>
-        <div class="field"><label>Dispatch Date</label><input type="date" id="edit-dispatchDate"></div>
-        <div class="field"><label>Vehicle Arrival (D-1)</label><input type="date" id="edit-vehicleDate"></div>
-        <div class="field"><label>Vehicle Number</label><input type="text" id="edit-vehicle"></div>
-        <div class="field"><label>Payment Terms</label>
-          <select id="edit-payment">
-            <option>Advance</option>
-            <option>Credit</option>
-            <option>Payment After Loading</option>
-          </select>
-        </div>
-        <div class="field"><label>Qty</label><input type="text" id="edit-qty"></div>
-        <div class="field"><label>Product</label><input type="text" id="edit-product"></div>
-      </div>
-      <div class="field" style="margin-top:12px"><label>Notes</label><textarea id="edit-notes"></textarea></div>
-      <div style="display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-        <button class="btn btn-primary" id="editSaveBtn" data-action="saveEdit">💾 Save Changes</button>
-        <button class="btn btn-ghost" data-action="closeEdit">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-
-<script data-cfasync="false">
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyDlbdFHeAMGM8-wg53r026ZihGuNVOncco",
-    authDomain: "gl-dispatch.firebaseapp.com",
-    projectId: "gl-dispatch",
-    storageBucket: "gl-dispatch.firebasestorage.app",
-    messagingSenderId: "197188265244",
-    appId: "1:197188265244:web:2468378d3be50218fe86d9"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db      = firebase.firestore();
-  const auth    = firebase.auth();
-  // Storage disabled (Spark plan) — upgrade to Blaze to enable photo upload
-
-
-let editReqId = null;
-
-function openEdit(id) {
-  const r = allRequests.find(x => x.id === id);
-  if (!r) return;
-  editReqId = id;
-  document.getElementById('edit-subtitle').textContent = (r.dispatchId || id.slice(0,10)) + ' — ' + (r.buyer||'');
-  document.getElementById('edit-orderType').value    = r.orderType || '';
-  document.getElementById('edit-buyer').value        = r.buyer || '';
-  document.getElementById('edit-dispatchDate').value = r.dispatchDate || '';
-  document.getElementById('edit-vehicleDate').value  = r.vehicleDate || '';
-  document.getElementById('edit-vehicle').value      = r.vehicle || '';
-  document.getElementById('edit-payment').value      = r.payment || '';
-  document.getElementById('edit-qty').value          = r.qty || '';
-  document.getElementById('edit-product').value      = r.product || '';
-  document.getElementById('edit-notes').value        = r.notes || '';
-  document.getElementById('editOverlay').classList.add('open');
-}
-
-function closeEdit(e) {
-  if (!e || e.target === document.getElementById('editOverlay'))
-    document.getElementById('editOverlay').classList.remove('open');
-}
-
-async function saveEdit() {
-  const btn = document.getElementById('editSaveBtn');
-  btn.innerHTML = '<span class="loading-spinner"></span> Saving...';
-  btn.disabled = true;
-  try {
-    await db.collection('dispatch_requests').doc(editReqId).update({
-      orderType:    document.getElementById('edit-orderType').value,
-      buyer:        document.getElementById('edit-buyer').value,
-      dispatchDate: document.getElementById('edit-dispatchDate').value,
-      vehicleDate:  document.getElementById('edit-vehicleDate').value,
-      vehicle:      document.getElementById('edit-vehicle').value,
-      payment:      document.getElementById('edit-payment').value,
-      qty:          document.getElementById('edit-qty').value,
-      product:      document.getElementById('edit-product').value,
-      notes:        document.getElementById('edit-notes').value,
-      lastEditedBy: currentUser.email,
-      lastEditedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    document.getElementById('editOverlay').classList.remove('open');
-    toast('✓ Changes saved successfully');
-  } catch(e) {
-    toast('Error: ' + e.message, true);
-  }
-  btn.innerHTML = '💾 Save Changes';
-  btn.disabled = false;
-}
-
-
-// ════════════════════════════════════════════════════════════════════
-// ROLE MAP — email → role name
-// ════════════════════════════════════════════════════════════════════
-// ── WHO CAN DO WHAT ──────────────────────────────────────────────
-// Planners                   → Create requests, view all
-// Dispatch Manager           → Create + full edit/view)
-// Production Manager         → Approve Step 1
-// General Manager            → Approve Step 2 (Final approver)
-// QC Manager                 → Approve Step 3 (temperature clearance)
-// Finance Approver           → Approve Step 4 (payment clearance)
-// CEO                        → View + Edit across all functions
-// Sales Head (Lalit)         → View-only
-
-// Emails encoded to prevent Netlify rewriting them
-function dec(s){ return atob(s); }
-const ROLE_MAP = (function(){
-  var m = {};
-  m[dec('aGFyaXNoLmpAZ3Jvd2VsaWNpb3VzLmNvbQ==')]      = 'Dispatch Manager';
-  m[dec('a29lbEBncm93ZWxpY2lvdXMuY29t')]               = 'Planner';
-  m[dec('cHJhdmVlbm1hdGhhbmdpQGxpY2lvdXMuY29t')]       = 'Production Manager';
-  m[dec('c2l2YS5zLmJAZ3Jvd2VsaWNpb3VzLmNvbQ==')]      = 'General Manager';
-  m[dec('Z29waW5hdGhAZ3Jvd2VsaWNpb3VzLmNvbQ==')]      = 'QC Manager';
-  m[dec('bW9oYW4ua3Jpc2huYUBncm93ZWxpY2lvdXMuY29t')] = 'Finance Approver';
-  m[dec('c2FqaXRoQGxpY2lvdXMuY29t')]                   = 'CEO';
-  m[dec('bGFsaXQuc0Bncm93ZWxpY2lvdXMuY29t')]           = 'Sales Head';
-  return m;
-})();
-
-// Approval chain: Finance(1) → CEO → GM → PM → QC → Finance(2) → Dispatch Manager
-const APPROVAL_CHAIN  = ['Finance Approver','CEO','General Manager','Production Manager','QC Manager','Finance Approver','Dispatch Manager'];
-const APPROVAL_KEYS   = { 'Finance Approver':'finance1', 'CEO':'ceo', 'General Manager':'gm', 'Production Manager':'pm', 'QC Manager':'qc', 'Dispatch Manager':'dispatch' };
-// Finance appears twice — step 1 key = finance1, step 6 key = finance2
-// getChainKey returns the right key based on what step this person is acting on
-function getChainKey(role, r) {
-  if (role !== 'Finance Approver') return APPROVAL_KEYS[role] || null;
-  // Finance step 1 if finance1 is still pending, step 2 if finance1 done
-  const f1 = r && r.approvals && r.approvals.finance1 ? r.approvals.finance1.status : 'pending';
-  return f1 === 'approved' ? 'finance2' : 'finance1';
-}
-// Step index for chain ordering (Finance: 0 or 5)
-function getChainIdx(role, r) {
-  if (role === 'Finance Approver') return getChainKey(role, r) === 'finance2' ? 5 : 0;
-  const map = { 'CEO':1, 'General Manager':2, 'Production Manager':3, 'QC Manager':4, 'Dispatch Manager':6 };
-  return map[role] !== undefined ? map[role] : -1;
-}
-// All roles that sit in the approval chain
-const APPROVER_ROLES  = ['Finance Approver','CEO','General Manager','Production Manager','QC Manager','Dispatch Manager'];
-
-// Roles that can CREATE new dispatch requests
-const CAN_CREATE  = ['Planner', 'Dispatch Manager', 'CEO'];
-// CEO is both creator and approver in chain
-// Roles that can EDIT existing requests (change details, reopen, etc.)
-const CAN_EDIT    = ['Dispatch Manager', 'CEO', 'Planner'];
-// Roles that are view-only
-const VIEW_ONLY   = ['Sales Head'];
-
-let currentUser = null;
-let currentRole = null;
-let allRequests = [];
-let activeReqId = null;
-let qcPhotosFiles = [];
-
-// ════════════════════════════════════════════════════════════════════
-// AUTH
-// ════════════════════════════════════════════════════════════════════
-auth.onAuthStateChanged(user => {
-  if (user) {
-    currentUser = user;
-    currentRole = ROLE_MAP[user.email] || 'Viewer';
-    document.getElementById('userRoleLabel').textContent = currentRole;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('appShell').style.display = 'block';
-
-    // Only Planners can create new requests
-    if (!CAN_CREATE.includes(currentRole)) {
-      document.getElementById('nav-new').style.display = 'none';
-    }
-    // QC log only for QC Manager, Dispatch Manager, Planners, CEO
-    if (!['QC Manager','Planner','Dispatch Manager','CEO'].includes(currentRole)) {
-      document.getElementById('nav-qc').style.display = 'none';
-    }
-
-    document.getElementById('dashDate').textContent =
-      new Date().toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-
-    // Set default dates — grey out past dates
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const tom = new Date(); tom.setDate(today.getDate()+1);
-    const tomStr = tom.toISOString().split('T')[0];
-    const dispEl2 = document.getElementById('f-dispatchDate');
-    if(dispEl2){ dispEl2.min = todayStr; dispEl2.value = tomStr; }
-    // Vehicle date = D-1 of dispatch (today by default)
-    const vehEl = document.getElementById('f-vehicleDate');
-    if(vehEl){ vehEl.min = todayStr; vehEl.value = todayStr; }
-
-    // Update pending role info
-    document.getElementById('pendingRoleInfo').innerHTML =
-      `<b>Your role: ${currentRole}</b> &nbsp;${
-        VIEW_ONLY.includes(currentRole)  ? '— View-only access. You can track all dispatches.' :
-        currentRole === 'CEO'            ? '— You can view and edit all dispatch requests.' :
-        currentRole === 'Dispatch Manager' ? '— You can create, edit and track all dispatch requests.' :
-        CAN_CREATE.includes(currentRole) ? '— You can create dispatch requests and track all approvals.' :
-        '— Requests awaiting your approval are shown below.'
-      }`;
-
-    listenToRequests();
-    listenToQCLogs();
-    loadCustomOptions();
-    initFormListeners();
-  } else {
-    currentUser = null;
-    currentRole = null;
-    document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('appShell').style.display = 'none';
-  }
-});
-
-async function doLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const pass  = document.getElementById('loginPass').value;
-  const btn   = document.getElementById('loginBtn');
-  const err   = document.getElementById('loginErr');
-  if (!email || !pass) { err.textContent = 'Please enter email and password'; return; }
-  btn.innerHTML = '<span class="loading-spinner"></span> Signing in...';
-  btn.disabled = true;
-  err.textContent = '';
-  try {
-    await auth.signInWithEmailAndPassword(email, pass);
-  } catch(e) {
-    err.textContent = e.code === 'auth/invalid-credential' ? 'Invalid email or password' : e.message;
-    btn.innerHTML = 'Sign In →';
-    btn.disabled = false;
-  }
-}
-
-function doLogout() {
-  auth.signOut();
-  showView('dashboard');
-}
-
-// ════════════════════════════════════════════════════════════════════
-// FIRESTORE LISTENERS
-// ════════════════════════════════════════════════════════════════════
-function listenToRequests() {
-  db.collection('dispatch_requests')
-    .orderBy('createdAt', 'desc')
-    .onSnapshot(snap => {
-      allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderAll();
-    }, err => {
-      console.error('Firestore error:', err);
-      toast('Database error: ' + err.message, true);
-    });
-}
-
-function listenToQCLogs() {
-  db.collection('qc_logs')
-    .orderBy('loggedAt', 'desc')
-    .onSnapshot(snap => {
-      const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderQCTable(logs);
-    });
-}
-
-// ════════════════════════════════════════════════════════════════════
-// RENDER
-// ════════════════════════════════════════════════════════════════════
-function renderAll() {
-  renderStats();
-  renderDashboard();
-  renderPending();
-  renderAllRequests();
-}
-
-function renderStats() {
-  const pending  = allRequests.filter(r => r.status === 'pending').length;
-  const approved = allRequests.filter(r => r.status === 'approved').length;
-  const rejected = allRequests.filter(r => r.status === 'rejected').length;
-  document.getElementById('s-pending').textContent  = pending;
-  document.getElementById('s-approved').textContent = approved;
-  document.getElementById('s-rejected').textContent = rejected;
-  document.getElementById('s-total').textContent    = allRequests.length;
-  document.getElementById('pendingCount').textContent = pending;
-}
-
-
-function fmtTime(ts) {
-  if (!ts) return '—';
-  try {
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return d.toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) +
-           ' ' + d.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
-  } catch(e) { return '—'; }
-}
-
-function pill(status, label) {
-  const text = label || status || 'pending';
-  const s = (status || 'pending').toLowerCase();
-  const colors = {
-    'approved': 'background:#d1fae5;color:#065f46',
-    'rejected': 'background:#fee2e2;color:#991b1b',
-    'pending':  'background:#fef3c7;color:#92400e',
-  };
-  const style = colors[s] || colors['pending'];
-  return '<span style="'+style+';padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">'+text+'</span>';
-}
-
-function renderDashboard() {
-  const tb = document.getElementById('dashboardTable');
-  const rows = allRequests.slice(0, 10);
-  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">📋</div><p>No requests yet. Create your first dispatch request.</p></td></tr>`; return; }
-  tb.innerHTML = rows.map(r => `
-    <tr>
-      <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
-      <td style="font-size:12px">${r.orderType||'—'}</td>
-      <td style="font-weight:600">${r.buyer||'—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td style="font-size:12px;color:var(--slate)">${r.stage||'—'}</td>
-      <td>${pill(r.status)}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
-    </tr>`).join('');
-}
-
-function renderPending() {
-  const tb = document.getElementById('pendingTable');
-  if (VIEW_ONLY.includes(currentRole)) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">👁️</div><p>Your role (${currentRole}) has view-only access. Use All Requests to track everything.</p></td></tr>`;
-    return;
-  }
-  if (currentRole === 'Planner') {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>As Planner, you create requests. Approval flow: Finance → CEO → GM → PM → QC → Finance → Dispatch. Track progress in All Requests.</p></td></tr>`;
-    return;
-  }
-  // stepKeys in order — Finance appears at index 0 (finance1) and 5 (finance2)
-  const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
-
-  const mine = allRequests.filter(r => {
-    if (r.status === 'approved' || r.status === 'rejected') return false;
-    // What key does this user act on for THIS request?
-    const myKey = getChainKey(currentRole, r);
-    if (!myKey) return false;
-    const a = r.approvals?.[myKey];
-    if (!a || a.status !== 'pending') return false;
-    // All prior steps must be approved
-    const myStepIdx = STEP_KEYS.indexOf(myKey);
-    if (myStepIdx < 0) return false;
-    for (let i = 0; i < myStepIdx; i++) {
-      if (r.approvals?.[STEP_KEYS[i]]?.status !== 'approved') return false;
-    }
-    return true;
-  });
-
-  if (!mine.length) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>No pending approvals for your role right now.</p></td></tr>`;
-    return;
-  }
-  // Finance: show enriched customer summary
-  if (currentRole === 'Finance Approver') {
-    tb.innerHTML = mine.map(r => {
-      const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg')),0);
-      return `<tr>
-        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
-        <td style="font-weight:600">${r.buyer||'—'}</td>
-        <td style="font-size:12px">${r.createdAt?.toDate?.().toLocaleDateString('en-IN')||r.dispatchDate||'—'}</td>
-        <td style="font-size:12px">${r.payment||'—'}</td>
-        <td style="font-size:12px;font-weight:600">₹${totalVal.toLocaleString('en-IN')}</td>
-        <td>${pill('pending', r.stage||'Pending')}</td>
-        <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
-      </tr>`;
-    }).join('');
-    // Finance gets richer column headers — swap them
-    const hdr = tb.closest('table')?.querySelector('thead tr');
-    if (hdr) hdr.innerHTML = '<th>Order No</th><th>Customer</th><th>Created</th><th>Payment Terms</th><th>Invoice Value</th><th>Stage</th><th>Action</th>';
-    return;
-  }
-
-  tb.innerHTML = mine.map(r => `
-    <tr>
-      <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
-      <td style="font-weight:600">${r.buyer||'—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td>${pill('pending', r.stage||'Pending')}</td>
-      <td style="font-size:12px;color:var(--slate)">${r.submittedBy||'—'}</td>
-      <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
-    </tr>`).join('');
-}
-
-function renderAllRequests() {
-  const tb = document.getElementById('allTable');
-  if (!allRequests.length) { tb.innerHTML = `<tr><td colspan="8" class="empty"><div class="ei">📋</div><p>No requests yet.</p></td></tr>`; return; }
-  tb.innerHTML = allRequests.map(r => `
-    <tr>
-      <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
-      <td style="font-size:12px">${r.orderType||'—'}</td>
-      <td style="font-weight:600">${r.buyer||'—'}</td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td style="font-size:12px">${r.payment||'—'}</td>
-      <td>${pill(r.status)}</td>
-      <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${fmtTime(r.createdAt)}</td>
-      <td style="display:flex;gap:5px">
-        <button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button>
-        ${CAN_EDIT.includes(currentRole) ? `<button class="btn btn-ghost btn-sm" onclick="openEdit('${r.id}')" style="color:var(--blue)">✏️</button>` : ''}
-      </td>
-    </tr>`).join('');
-}
-
-function renderQCTable(logs) {
-  const tb = document.getElementById('qcTable');
-  if (!logs.length) { tb.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">No QC logs yet</td></tr>`; return; }
-  tb.innerHTML = logs.map(q => {
-    const vOk = parseFloat(q.vehicleTemp) <= -10;
-    const pOk = parseFloat(q.productTemp) <= -18;
-    const photos = q.photoUrls?.length ? `<a href="${q.photoUrls[0]}" target="_blank" style="color:var(--blue);font-size:12px">View (${q.photoUrls.length})</a>` : '—';
-    return `<tr>
-      <td><span class="tag">${q.requestId||'—'}</span></td>
-      <td style="font-family:'DM Mono',monospace;font-size:12px">${q.vehicle||'—'}</td>
-      <td style="font-weight:600;color:${vOk?'var(--green)':'var(--red)'}">${q.vehicleTemp}°C</td>
-      <td style="font-weight:600;color:${pOk?'var(--green)':'var(--red)'}">${q.productTemp}°C</td>
-      <td>${pill(q.clearanceStatus?.includes('Cleared for')?'approved':'rejected', q.clearanceStatus)}</td>
-      <td>${q.officer||'—'}</td>
-      <td>${photos}</td>
-      <td style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">${fmtTime(q.loggedAt)}</td>
-    </tr>`;
-  }).join('');
-}
-
-function filterTable(val) {
-  document.querySelectorAll('#allTable tr').forEach(r => {
-    r.style.display = r.textContent.toLowerCase().includes(val.toLowerCase()) ? '' : 'none';
-  });
-}
+function filterTable(val){const el=document.getElementById("search-all");if(el)el.value=val;renderAllRequests();}
 
 // ════════════════════════════════════════════════════════════════════
 // SUBMIT NEW REQUEST
@@ -3059,7 +1593,17 @@ async function financeSubmit() {
   const margin       = document.getElementById('d-fin-margin').value;
   const remark       = document.getElementById('d-fin-remark').value.trim();
 
-  if (decision === 'hold' && !holdReason) { toast('Select a Hold reason before submitting', true); return; }
+  const missingFields = [];
+  if (!kyc)          missingFields.push('KYC Verified');
+  if (!gst)          missingFields.push('GST Applicable');
+  if (!tcs)          missingFields.push('TCS Applicable');
+  if (!creditLimit)  missingFields.push('Credit Limit');
+  if (!outstanding && outstanding!=='0') missingFields.push('Customer Outstanding');
+  if (!prodCost)     missingFields.push('Production Cost/Kg');
+  if (!remark)       missingFields.push('Finance Comments');
+  if (decision==='hold' && !holdReason) missingFields.push('Hold Reason');
+  if (missingFields.length) { toast('Required: '+missingFields.join(', '),true); return; }
+
 
   const btn = document.getElementById('d-fin-submit-btn');
   btn.disabled = true; btn.textContent = 'Submitting...';
@@ -3333,6 +1877,9 @@ document.addEventListener('DOMContentLoaded', function() {
   on('[data-action="financeReject"]',  'click', function(){ financeReject(); });
   on('[data-action="withdrawOrder"]',  'click', function(){ withdrawOrder(); });
   on('[data-action="editFromDetail"]', 'click', function(){ editFromDetail(); });
+  document.addEventListener('change',function(e){
+    if(e.target.id==='filter-fy'||e.target.id==='filter-status') renderAllRequests();
+  });
   // FY and status filter changes
   document.addEventListener('change', function(e){
     if (e.target.id==='filter-fy' || e.target.id==='filter-status') renderAllRequests();
@@ -3934,6 +2481,132 @@ function toast(msg, err) {
   clearTimeout(t._timer);
   t._timer = setTimeout(function(){ t.style.display='none'; }, 3500);
 }
+
+function exportCSV() {
+  const rows = getFilteredRequests();
+  if (!rows.length) { toast('No data to export', true); return; }
+  const headers = ['Order No','Date','Buyer','Order Type','Dispatch Date','Payment Terms',
+    'Transport','Vehicle Arrangement','Status','Stage','Submitted By',
+    'SKU Count','Total Value (₹)','Finance Decision','Finance P&L (₹)','Finance Margin %'];
+  const lines = [headers.join(',')];
+  rows.forEach(r => {
+    const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
+    const fa = r.approvals?.finance1 || {};
+    const dt = r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString('en-IN') : (r.dispatchDate||'');
+    const row = [
+      r.dispatchId||r.id.slice(0,10), dt, r.buyer||'', r.orderType||'',
+      r.dispatchDate||'', r.payment||'', r.transport||'', r.vehicleArrangement||'',
+      r.status||'', (r.stage||'').replace(/,/g,' '), r.submittedBy||'',
+      (r.skus||[]).length, totalVal.toFixed(2),
+      fa.decision||'', fa.pl||'', fa.margin||''
+    ].map(v => '"'+String(v).replace(/"/g,'""')+'"');
+    lines.push(row.join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const fy   = document.getElementById('filter-fy')?.value || 'All';
+  a.href = url; a.download = 'GL_Dispatch_'+fy+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(url);
+  toast('✓ Exported '+rows.length+' records');
+}
+
+function getFYLabel(date) {
+  // Indian FY: Apr 1 – Mar 31. FY2025-26 = Apr 2025 – Mar 2026
+  const d = date instanceof Date ? date : (date?.toDate ? date.toDate() : new Date(date));
+  if (isNaN(d)) return null;
+  const yr = d.getFullYear(), mo = d.getMonth(); // 0=Jan
+  const fyStart = mo >= 3 ? yr : yr - 1; // April=3
+  return 'FY' + fyStart + '-' + String(fyStart+1).slice(-2);
+}
+
+function getFilteredRequests() {
+  const fy     = document.getElementById('filter-fy')?.value || '';
+  const status = document.getElementById('filter-status')?.value || '';
+  return allRequests.filter(r => {
+    if (status && r.status !== status) return false;
+    if (fy && getFYLabel(r.createdAt) !== fy) return false;
+    return true;
+  });
+}
+
+function notifyFinanceTeam(dispatchId, order) {
+  const buyer       = order.buyer || '—';
+  const dispDate    = order.dispatchDate || '—';
+  const payment     = order.payment || '—';
+  const totalVal    = (order.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg')),0);
+  const skuSummary  = (order.skus||[]).map((s,i)=>{
+    const qKg = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
+    return (i+1)+'. '+s.product+' '+s.spec+(s.subspec?' / '+s.subspec:'')+' — '+qKg.toLocaleString('en-IN')+' Kg @ ₹'+s.price+'/Kg';
+  }).join('%0A');
+
+  const portalUrl   = 'https://growelicious.github.io/gl-dispatch/';
+  const msg =
+    '*GL Dispatch — Finance Review Required*%0A' +
+    '━━━━━━━━━━━━━━━━━━%0A' +
+    '*Order:* '+dispatchId+'%0A' +
+    '*Customer:* '+buyer+'%0A' +
+    '*Dispatch Date:* '+dispDate+'%0A' +
+    '*Payment Terms:* '+payment+'%0A' +
+    '*Order Value:* ₹'+totalVal.toLocaleString('en-IN')+'%0A' +
+    '─────────────────%0A' +
+    '*SKUs:%0A'+skuSummary+'%0A' +
+    '─────────────────%0A' +
+    'Please review and approve/hold at:%0A' +
+    portalUrl + '%0A' +
+    '_Login required — use your registered email_';
+
+  // WhatsApp numbers (finance team)
+  const waNumbers = ['917405331591','919964963994','919655120224'];
+  const waLinks   = waNumbers.map(n => 'https://wa.me/'+n+'?text='+msg);
+
+  // Open WA links with stagger
+  waLinks.forEach((url, i) => {
+    setTimeout(() => { window.open(url, '_blank'); }, i * 800);
+  });
+
+  // Email
+  const emailTo  = 'romanchi@pawfectlymade.com,nazeer.a@growelicious.com,harish.j@growelicious.com';
+  const subject  = encodeURIComponent('GL Dispatch — Finance Review: '+dispatchId+' | '+buyer);
+  const body     = encodeURIComponent(
+    'Finance Review Required\n\n' +
+    'Order: '+dispatchId+'\n' +
+    'Customer: '+buyer+'\n' +
+    'Dispatch Date: '+dispDate+'\n' +
+    'Payment Terms: '+payment+'\n' +
+    'Order Value: ₹'+totalVal.toLocaleString('en-IN')+'\n\n' +
+    'SKUs:\n'+(order.skus||[]).map((s,i)=>{
+      const qKg = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
+      return (i+1)+'. '+s.product+' '+s.spec+(s.subspec?' / '+s.subspec:'')+' — '+qKg.toLocaleString('en-IN')+' Kg @ ₹'+s.price+'/Kg';
+    }).join('\n')+'\n\n' +
+    'Review & Approve/Hold at:\n'+portalUrl+'\n\n' +
+    'Login with your registered email to take action.\n\n' +
+    '— GL Dispatch Portal (Auto-notification)'
+  );
+  setTimeout(() => {
+    window.open('mailto:'+emailTo+'?subject='+subject+'&body='+body, '_self');
+  }, 2500);
+
+  toast('📲 WhatsApp & email notifications sent to Finance team');
+}
+
+function populateFYFilter() {
+  const sel = document.getElementById('filter-fy');
+  if (!sel) return;
+  const fys = new Set();
+  allRequests.forEach(r => { const fy = getFYLabel(r.createdAt); if(fy) fys.add(fy); });
+  // Always show last 5 FYs
+  const now = new Date();
+  for (let i = 0; i < 10; i++) {
+    const yr = now.getFullYear() - i;
+    const fy = getFYLabel(new Date(yr, 3, 1)); // Apr 1
+    fys.add(fy);
+  }
+  const sorted = Array.from(fys).sort().reverse();
+  sel.innerHTML = '<option value="">All Years</option>' +
+    sorted.map(f => `<option value="${f}">${f}</option>`).join('');
+}
+
 </script>
 </body>
 </html>
