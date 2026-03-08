@@ -897,6 +897,19 @@ function renderStats() {
   document.getElementById('pendingCount').textContent = pending;
 }
 
+
+function pill(status, label) {
+  const text = label || status || 'pending';
+  const s = (status || 'pending').toLowerCase();
+  const colors = {
+    'approved': 'background:#d1fae5;color:#065f46',
+    'rejected': 'background:#fee2e2;color:#991b1b',
+    'pending':  'background:#fef3c7;color:#92400e',
+  };
+  const style = colors[s] || colors['pending'];
+  return '<span style="'+style+';padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">'+text+'</span>';
+}
+
 function renderDashboard() {
   const tb = document.getElementById('dashboardTable');
   const rows = allRequests.slice(0, 10);
@@ -1054,7 +1067,7 @@ async function submitRequest() {
       }
     }
     // Units: Kg and Cases allowed together (1 Case = 10Kg conversion applied)
-    const sUnit=row.querySelector('.sku-stocks-unit').value;
+    const sUnit='Cases'; // stock always in Cases
     const stocksVal=parseFloat(row.querySelector('.sku-stocks').value)||0;
     const pkgTypeSel=row.querySelector('.sku-pkg-type').value;
     const pkgType=pkgTypeSel==='Others'?row.querySelector('.sku-pkg-type-others').value.trim():pkgTypeSel;
@@ -1859,10 +1872,7 @@ function addSkuRow(prefill){
     if(prod && spec) { fetchSkuStock(div); return; }
     syncUnits(div); calcProdPlan(div);
   });
-  div.querySelector('.sku-stocks-unit').addEventListener('change',function(){
-    syncUnits(div);
-    calcProdPlan(div);
-  });
+  // stock unit fixed to Cases — no change listener needed
   div.querySelector('.sku-qty-val').addEventListener('input',function(){ calcProdPlan(div); });
   div.querySelector('.sku-stocks').addEventListener('input',function(){ calcProdPlan(div); });
   div.querySelector('.sku-stock-gl').addEventListener('input',function(){ syncTotalFromBreakup(div); });
@@ -1876,7 +1886,7 @@ function addSkuRow(prefill){
     if(prefill.spec)    div.querySelector('.sku-spec').value=prefill.spec;
     if(prefill.stocksAvailable!==undefined){
       div.querySelector('.sku-stocks').value=prefill.stocksAvailable;
-      div.querySelector('.sku-stocks-unit').value=prefill.unit||'Kg';
+      // sku-stocks-unit removed — stock always Cases
       div.querySelector('.sku-stock-gl').value=prefill.glWh||0;
       div.querySelector('.sku-stock-cf').value=prefill.cfWh||0;
       syncUnits(div);
@@ -2028,7 +2038,7 @@ async function fetchSkuStock(div){
 
     // ── 5. Populate form ────────────────────────────────────────────
     div.querySelector('.sku-stocks').value      = remainingDisp;
-    div.querySelector('.sku-stocks-unit').value = qtyUnit;
+    // sku-stocks-unit removed — stock always Cases
     div.querySelector('.sku-stock-gl').value    = glDisp;
     div.querySelector('.sku-stock-cf').value    = cfDisp;
     syncUnits(div); calcProdPlan(div);
