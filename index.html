@@ -321,10 +321,12 @@
           <p id="dashDate"></p>
         </div>
         <div class="stats">
-          <div class="stat-card"><div class="label">Pending</div><div class="value" style="color:var(--amber)" id="s-pending">—</div><div class="sub">Awaiting action</div></div>
-          <div class="stat-card"><div class="label">Approved</div><div class="value" style="color:var(--green)" id="s-approved">—</div><div class="sub">Fully cleared</div></div>
-          <div class="stat-card"><div class="label">Total</div><div class="value" id="s-total">—</div><div class="sub">All requests</div></div>
-          <div class="stat-card"><div class="label">Rejected</div><div class="value" style="color:var(--red)" id="s-rejected">—</div><div class="sub">Needs action</div></div>
+          <div class="stat-card" onclick="showView('all-requests')" style="cursor:pointer">
+            <div class="label">Total Requests</div><div class="value" id="s-total">—</div><div class="sub">↗ All requests</div></div>
+          <div class="stat-card" onclick="filterAndGoto('pending')" style="cursor:pointer">
+            <div class="label">Pending</div><div class="value" style="color:var(--amber)" id="s-pending">—</div><div class="sub">↗ Awaiting action</div></div>
+          <div class="stat-card" onclick="filterAndGoto('approved')" style="cursor:pointer">
+            <div class="label">Approved</div><div class="value" style="color:var(--green)" id="s-approved">—</div><div class="sub">↗ Fully cleared</div></div>
         </div>
         <div class="card">
           <div class="card-header">
@@ -870,7 +872,15 @@ let qcPhotosFiles = [];
 // ════════════════════════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════════════════════════
-auth.onAuthStateChanged(user => {
+auth.// Fast path — show loading state while auth resolves
+const _cachedEmail = localStorage.getItem("gl_dispatch_email");
+if (_cachedEmail) {
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("appShell").style.display = "block";
+  document.getElementById("appShell").innerHTML += '';
+}
+
+onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
     currentRole = ROLE_MAP[user.email] || 'Viewer';
@@ -912,10 +922,12 @@ auth.onAuthStateChanged(user => {
         '— Requests awaiting your approval are shown below.'
       }`;
 
+    localStorage.setItem('gl_dispatch_email', user.email);
     listenToRequests();
     listenToQCLogs();
     loadCustomOptions();
     initFormListeners();
+    renderAll(); // clear Loading state immediately on auth
   } else {
     currentUser = null;
     currentRole = null;
@@ -944,6 +956,7 @@ async function doLogin() {
 
 function doLogout() {
   auth.signOut();
+  localStorage.removeItem('gl_dispatch_email');
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -981,14 +994,15 @@ function renderAll() {
 }
 
 function renderStats() {
-  const pending  = allRequests.filter(r => r.status === 'pending').length;
-  const approved = allRequests.filter(r => r.status === 'approved').length;
-  const rejected = allRequests.filter(r => r.status === 'rejected').length;
-  document.getElementById('s-pending').textContent  = pending;
-  document.getElementById('s-approved').textContent = approved;
-  document.getElementById('s-rejected').textContent = rejected;
-  document.getElementById('s-total').textContent    = allRequests.length;
-  document.getElementById('pendingCount').textContent = pending;
+  const total    = allRequests.length;
+  const pending  = allRequests.filter(r=>r.status==='pending').length;
+  const approved = allRequests.filter(r=>r.status==='approved').length;
+  const pe = document.getElementById('s-pending');
+  const ae = document.getElementById('s-approved');
+  const te = document.getElementById('s-total');
+  if(pe) pe.textContent = pending;
+  if(ae) ae.textContent = approved;
+  if(te) te.textContent = total;
 }
 
 
@@ -999,6 +1013,12 @@ function fmtTime(ts) {
     return d.toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) +
            ' ' + d.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
   } catch(e) { return '—'; }
+}
+
+function filterAndGoto(status) {
+  showView('all-requests');
+  const sel = document.getElementById('filter-status');
+  if (sel) { sel.value = status; renderAllRequests(); }
 }
 
 function pill(status, label) {
@@ -1015,15 +1035,19 @@ function pill(status, label) {
 
 function renderDashboard() {
   const tb = document.getElementById('dashboardTable');
-  const rows = allRequests.slice(0, 10);
-  if (!rows.length) { tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">📋</div><p>No requests yet. Create your first dispatch request.</p></td></tr>`; return; }
+  if (!tb) return;
+  if (!allRequests.length) {
+    tb.innerHTML = `<tr><td colspan="7" class="empty"><div class="ei">📋</div><p>No dispatch requests yet.</p></td></tr>`;
+    return;
+  }
+  const rows = allRequests.slice(0, 15);
   tb.innerHTML = rows.map(r => `
     <tr>
       <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
       <td style="font-size:12px">${r.orderType||'—'}</td>
       <td style="font-weight:600">${r.buyer||'—'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:12px">${r.dispatchDate||'—'}</td>
-      <td style="font-size:12px;color:var(--slate)">${r.stage||'—'}</td>
+      <td style="font-size:12px;color:var(--slate);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.stage||'—'}</td>
       <td>${pill(r.status)}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
     </tr>`).join('');
