@@ -306,8 +306,8 @@
       <div class="sidebar-item active" data-action="gotoDash"><span class="icon">📊</span> Dashboard</div>
       <div class="sidebar-item" id="nav-new" data-view="new-request"><span class="icon">➕</span> New Dispatch Request</div>
       <div class="sidebar-section" style="margin-top:12px">Approvals</div>
-      
-      <div class="sidebar-item" data-view="all-requests"><span class="icon">📋</span> All Requests</div>
+      <div class="sidebar-item" id="nav-pending" data-view="pending"><span class="icon">🔔</span> Pending Approvals <span class="badge-count" id="pendingCount">0</span></div>
+      <div class="sidebar-item" data-view="all-requests" id="nav-all"><span class="icon">📋</span> All Requests</div>
       <div class="sidebar-section" style="margin-top:12px">Modules</div>
       <div class="sidebar-item" id="nav-qc" data-view="qc-checks"><span class="icon">🌡️</span> QC Temperature Log</div>
     </nav>
@@ -889,8 +889,14 @@ onAuthStateChanged(user => {
       const nb=document.getElementById('dash-new-btn');if(nb)nb.style.display='none';
     }
     // QC log only for QC Manager, Dispatch Manager, Planners, CEO
-    if (!['QC Manager','Planner','Dispatch Manager','CEO'].includes(currentRole)) {
+    // QC log: only QC Manager and Dispatch Manager
+    if (!['QC Manager','Dispatch Manager'].includes(currentRole)) {
       document.getElementById('nav-qc').style.display = 'none';
+    }
+    // Pending approvals: hide for Planner and View Only roles
+    if (['Planner'].concat(VIEW_ONLY).includes(currentRole)) {
+      const np = document.getElementById('nav-pending');
+      if (np) np.style.display = 'none';
     }
 
     document.getElementById('dashDate').textContent =
@@ -993,9 +999,11 @@ function renderStats() {
   const pe = document.getElementById('s-pending');
   const ae = document.getElementById('s-approved');
   const te = document.getElementById('s-total');
+  const pc = document.getElementById('pendingCount');
   if(pe) pe.textContent = pending;
   if(ae) ae.textContent = approved;
   if(te) te.textContent = total;
+  if(pc) pc.textContent = pending;
 }
 
 
