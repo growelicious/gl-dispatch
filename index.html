@@ -304,7 +304,7 @@
     <nav class="sidebar">
       <div class="sidebar-section">Main</div>
       <div class="sidebar-item active" data-action="gotoDash"><span class="icon">📊</span> Dashboard</div>
-      <div class="sidebar-item" id="nav-new"><span class="icon">➕</span> New Dispatch Request</div>
+      <div class="sidebar-item" id="nav-new" data-view="new-request"><span class="icon">➕</span> New Dispatch Request</div>
       <div class="sidebar-section" style="margin-top:12px">Approvals</div>
       
       <div class="sidebar-item" data-view="all-requests"><span class="icon">📋</span> All Requests</div>
@@ -873,12 +873,12 @@ let qcPhotosFiles = [];
 // AUTH
 // ════════════════════════════════════════════════════════════════════
 auth.// Fast path — show loading state while auth resolves
-const _cachedEmail = localStorage.getItem("gl_dispatch_email");
-if (_cachedEmail) {
-  document.getElementById("loginScreen").style.display = "none";
-  document.getElementById("appShell").style.display = "block";
-  document.getElementById("appShell").innerHTML += '';
-}
+try {
+  if (localStorage.getItem("gl_dispatch_email")) {
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("appShell").style.display = "block";
+  }
+} catch(e) { /* incognito / storage blocked — ignore */ }
 
 onAuthStateChanged(user => {
   if (user) {
@@ -922,7 +922,7 @@ onAuthStateChanged(user => {
         '— Requests awaiting your approval are shown below.'
       }`;
 
-    localStorage.setItem('gl_dispatch_email', user.email);
+    try{localStorage.setItem('gl_dispatch_email',user.email);}catch(e){}
     listenToRequests();
     listenToQCLogs();
     loadCustomOptions();
@@ -956,7 +956,7 @@ async function doLogin() {
 
 function doLogout() {
   auth.signOut();
-  localStorage.removeItem('gl_dispatch_email');
+  try{localStorage.removeItem('gl_dispatch_email');}catch(e){}
 }
 
 // ════════════════════════════════════════════════════════════════════
