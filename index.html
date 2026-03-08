@@ -2119,10 +2119,14 @@ function openDetail(id) {
   // Planner withdraw / modify — show for Planner/CEO on pending requests
   const plannerActPanel = document.getElementById('d-planner-actions');
   if (plannerActPanel) {
-    const canWithdraw = (currentRole==='Planner'||currentRole==='CEO'||currentRole==='Dispatch Manager') && r.status==='pending';
-    plannerActPanel.style.display = canWithdraw ? 'block' : 'none';
+    // Only Planner can see the full actions panel (Modify + Withdraw)
+    const canActOnOrder = currentRole === 'Planner' && r.status === 'pending';
+    plannerActPanel.style.display = canActOnOrder ? 'block' : 'none';
     const titleEl = document.getElementById('d-planner-actions-title');
-    if(titleEl) titleEl.textContent = currentRole==='CEO' ? '📝 CEO — Modify or Reject' : '📝 Planner Actions';
+    if(titleEl) titleEl.textContent = '📝 Planner Actions';
+    // Modify button: Planner only
+    const editBtn = document.getElementById('d-edit-from-detail-btn');
+    if (editBtn) editBtn.style.display = currentRole === 'Planner' ? 'inline-flex' : 'none';
     document.getElementById('d-withdraw-remark').value = '';
   }
 
@@ -2514,7 +2518,11 @@ document.addEventListener('DOMContentLoaded', function() {
   on('[data-action="financeSubmit"]',  'click', function(){ financeSubmit(); });
   on('[data-action="financeReject"]',  'click', function(){ financeReject(); });
   on('[data-action="withdrawOrder"]',  'click', function(){ withdrawOrder(); });
-  on('[data-action="editFromDetail"]', 'click', function(){ editFromDetail(); });
+  // editFromDetail — delegated via document click
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-action="editFromDetail"]');
+    if (btn) { e.stopPropagation(); editFromDetail(); }
+  });
   document.addEventListener('change',function(e){
     if(e.target.id==='filter-fy'||e.target.id==='filter-status') renderAllRequests();
     if(e.target.id==='dash-filter-fy') renderDashboard();
