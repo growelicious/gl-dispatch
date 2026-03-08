@@ -722,8 +722,8 @@
           <textarea id="d-withdraw-remark" placeholder="Reason for withdrawal or modification details..." style="min-height:54px"></textarea>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" id="d-edit-from-detail-btn" data-action="editFromDetail">✏️ Modify Order</button>
-          <button class="btn btn-red btn-sm" id="d-withdraw-btn" data-action="withdrawOrder">🗑 Withdraw Order</button>
+          <button class="btn btn-ghost btn-sm" id="d-edit-from-detail-btn" onclick="editFromDetail()">✏️ Modify Order</button>
+          <button class="btn btn-red btn-sm" id="d-withdraw-btn" onclick="withdrawOrder()">🗑 Withdraw Order</button>
         </div>
       </div>
     </div>
@@ -2518,11 +2518,7 @@ document.addEventListener('DOMContentLoaded', function() {
   on('[data-action="financeSubmit"]',  'click', function(){ financeSubmit(); });
   on('[data-action="financeReject"]',  'click', function(){ financeReject(); });
   on('[data-action="withdrawOrder"]',  'click', function(){ withdrawOrder(); });
-  // editFromDetail — delegated via document click
-  document.addEventListener('click', function(e) {
-    const btn = e.target.closest('[data-action="editFromDetail"]');
-    if (btn) { e.stopPropagation(); editFromDetail(); }
-  });
+  // editFromDetail wired via fnMap loop
   document.addEventListener('change',function(e){
     if(e.target.id==='filter-fy'||e.target.id==='filter-status') renderAllRequests();
     if(e.target.id==='dash-filter-fy') renderDashboard();
