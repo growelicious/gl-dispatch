@@ -417,6 +417,16 @@
                   </label>
                 </div>
               </div>
+              <div class="field"><label>Vehicle Arrangement</label>
+                <select id="f-vehicle-arrangement">
+                  <option value="">— Select —</option>
+                  <option>Buyer</option>
+                  <option>GL</option>
+                </select>
+              </div>
+              <div class="field" id="f-logistics-cost-wrap" style="display:none"><label>Logistics Cost / Kg (₹)</label>
+                <input type="number" id="f-logistics-cost" placeholder="e.g. 12.50" min="0" step="0.01">
+              </div>
               <div class="field"><label>Transport Mode *</label>
                 <select id="f-transport">
                   <option value="">— Select —</option>
@@ -548,34 +558,104 @@
       <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px">Activity Log</div>
       <ul class="timeline" id="d-timeline"></ul>
       <!-- Finance-specific review panel (shown only to Finance Approver on pending finance step) -->
-      <div id="d-finance-panel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:18px;margin-top:12px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:14px">📊 Finance Review — Customer Outstanding, Production Cost & CEO Submission</div>
-        <div class="form-grid">
-          <div class="field"><label>Payment Terms</label>
-            <select id="d-fin-payment-sel">
-              <option value="">— Same as order —</option>
-              <option>Advance</option><option>Credit</option><option>Payment After Loading</option><option>Others</option>
-            </select>
-            <input type="text" id="d-fin-payment-text" placeholder="Specify / add note on payment terms..." style="margin-top:6px">
+      <div id="d-finance-panel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:12px">
+
+        <!-- ① Customer Summary -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:14px" class="fin-panel-title">📊 Finance Review — Customer Outstanding, Production Cost &amp; CEO Submission</div>
+
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">① Customer &amp; Trade Summary</div>
+          <div class="info-grid" style="grid-template-columns:repeat(3,1fr);gap:10px" id="d-fin-customer-summary"></div>
+        </div>
+
+        <!-- ② SKU Table -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">② SKU / Proforma Invoice</div>
+          <div id="d-fin-sku-table"></div>
+          <div id="d-fin-invoice-total" style="text-align:right;font-weight:700;font-size:14px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
+        </div>
+
+        <!-- ③ Customer KYC / Compliance (memory-backed) -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">③ KYC &amp; Compliance <span style="font-size:10px;font-weight:400;color:var(--muted)">(auto-saved per customer)</span></div>
+          <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
+            <div class="field"><label>KYC Verified</label>
+              <select id="d-fin-kyc"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
+            <div class="field"><label>GST Applicable</label>
+              <select id="d-fin-gst"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
+            <div class="field"><label>TCS Applicable</label>
+              <select id="d-fin-tcs"><option value="">— Select —</option><option>Yes</option><option>No</option></select></div>
+            <div class="field"><label>Credit Limit (₹)</label>
+              <input type="number" id="d-fin-credit-limit" placeholder="e.g. 500000" min="0" step="1000"></div>
+            <div class="field"><label>Customer Outstanding (₹)</label>
+              <input type="number" id="d-fin-outstanding" placeholder="e.g. 50000" min="0" step="0.01"></div>
+            <div class="field"><label>Credit Limit Exceeded?</label>
+              <div id="d-fin-credit-flag" style="padding:8px;border-radius:6px;font-weight:700;font-size:13px;text-align:center;background:#f0f4f8">—</div></div>
           </div>
-          <div class="field"><label>Customer Outstanding (₹)</label>
-            <input type="number" id="d-fin-outstanding" placeholder="e.g. 50000" min="0" step="0.01">
-            <textarea id="d-fin-outstanding-note" placeholder="Notes on outstanding / credit limit / dues..." style="margin-top:6px;min-height:54px"></textarea>
-          </div>
-          <div class="field"><label>Production Cost (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">optional</span></label>
-            <input type="number" id="d-fin-prod-cost" placeholder="Total estimated production cost" min="0" step="0.01">
-          </div>
-          <div class="field"><label>Trade P&amp;L (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">auto-calculated or manual</span></label>
-            <input type="number" id="d-fin-pl" placeholder="Revenue − Production Cost" step="0.01">
-            <div id="d-fin-pl-auto" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+          <div class="field" style="margin-top:4px"><label>Outstanding / KYC Notes</label>
+            <textarea id="d-fin-outstanding-note" placeholder="Notes on outstanding balance, KYC status, dues..." style="min-height:48px"></textarea></div>
+        </div>
+
+        <!-- ④ Payment Terms -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">④ Payment Terms</div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr">
+            <div class="field"><label>Planner's Terms <span style="font-weight:400;font-size:11px;color:var(--muted)">(from order)</span></label>
+              <div id="d-fin-planner-payment" style="padding:8px;background:#f0f4f8;border-radius:6px;font-size:13px">—</div></div>
+            <div class="field"><label>Finance — Approve / Modify</label>
+              <select id="d-fin-payment-sel">
+                <option value="">— Approve existing —</option>
+                <option>Advance</option><option>Credit</option><option>Payment After Loading</option><option>Others</option>
+              </select>
+              <input type="text" id="d-fin-payment-text" placeholder="Add note or specify terms..." style="margin-top:6px"></div>
           </div>
         </div>
-        <div class="field" style="margin-top:4px"><label>Finance Remarks</label>
-          <textarea id="d-fin-remark" placeholder="Any additional remarks for CEO / operations team..." style="min-height:54px"></textarea>
+
+        <!-- ⑤ P&L -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">⑤ P&amp;L Calculation</div>
+          <div class="form-grid" style="grid-template-columns:repeat(3,1fr)">
+            <div class="field"><label>Revenue (auto)</label>
+              <input type="number" id="d-fin-revenue" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
+            <div class="field"><label>Production Cost / Kg (₹)</label>
+              <input type="number" id="d-fin-prod-cost" placeholder="e.g. 85.00" min="0" step="0.01"></div>
+            <div class="field"><label>Logistics Cost / Kg (₹) <span style="font-weight:400;font-size:11px;color:var(--muted)">(if GL)</span></label>
+              <input type="number" id="d-fin-logistics" placeholder="0" min="0" step="0.01"></div>
+            <div class="field"><label>Total Cost (auto)</label>
+              <input type="number" id="d-fin-total-cost" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
+            <div class="field"><label>Trade P&amp;L (₹)</label>
+              <input type="number" id="d-fin-pl" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
+            <div class="field"><label>Margin %</label>
+              <input type="number" id="d-fin-margin" readonly style="background:#f0f4f8;cursor:not-allowed"></div>
+          </div>
+          <div id="d-fin-pl-auto" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
         </div>
+
+        <!-- ⑥ Finance Comments & Decision -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:10px">⑥ Finance Decision</div>
+          <div class="field"><label>Finance Comments</label>
+            <textarea id="d-fin-remark" placeholder="Comments for CEO and operations team..." style="min-height:60px"></textarea></div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-top:8px">
+            <div class="field"><label>Decision</label>
+              <select id="d-fin-decision">
+                <option value="approved">✅ Approved — Submit to CEO</option>
+                <option value="hold">⏸ Hold</option>
+              </select></div>
+            <div class="field" id="d-fin-hold-wrap" style="display:none"><label>Hold Reason</label>
+              <select id="d-fin-hold-reason">
+                <option value="">— Select reason —</option>
+                <option>KYC Pending</option>
+                <option>Credit Limit Exceeded</option>
+                <option>Outstanding Payment Overdue</option>
+                <option>Others</option>
+              </select></div>
+          </div>
+        </div>
+
         <div style="display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
           <button class="btn btn-primary" id="d-fin-submit-btn" data-action="financeSubmit">Submit to CEO →</button>
-          <button class="btn btn-red btn-sm" id="d-fin-reject-btn" data-action="financeReject">✗ Reject / Query</button>
+          <button class="btn btn-red btn-sm" id="d-fin-reject-btn" data-action="financeReject">✗ Return / Query</button>
         </div>
       </div>
 
@@ -959,6 +1039,26 @@ function renderPending() {
     tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">✅</div><p>No pending approvals for your role right now.</p></td></tr>`;
     return;
   }
+  // Finance: show enriched customer summary
+  if (currentRole === 'Finance Approver') {
+    tb.innerHTML = mine.map(r => {
+      const totalVal = (r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0)),0);
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-size:12px">${r.createdAt?.toDate?.().toLocaleDateString('en-IN')||r.dispatchDate||'—'}</td>
+        <td style="font-size:12px">${r.payment||'—'}</td>
+        <td style="font-size:12px;font-weight:600">₹${totalVal.toLocaleString('en-IN')}</td>
+        <td>${pill('pending', r.stage||'Pending')}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
+      </tr>`;
+    }).join('');
+    // Finance gets richer column headers — swap them
+    const hdr = tb.closest('table')?.querySelector('thead tr');
+    if (hdr) hdr.innerHTML = '<th>Order No</th><th>Customer</th><th>Created</th><th>Payment Terms</th><th>Invoice Value</th><th>Stage</th><th>Action</th>';
+    return;
+  }
+
   tb.innerHTML = mine.map(r => `
     <tr>
       <td><span class="tag">${r.dispatchId || r.id.slice(0,10)}</span></td>
@@ -1243,31 +1343,105 @@ function openDetail(id) {
   const actPanel = document.getElementById('d-actions');
 
   if (currentRole==='Finance Approver' && isMyTurn) {
-    // Finance review panel (step 1 or step 2)
     finPanel.style.display = 'block';
     actPanel.style.display = 'none';
     const fa = r.approvals?.[myKey] || {};
     const isFinStep2 = myKey === 'finance2';
-    document.getElementById('d-fin-submit-btn').textContent = isFinStep2 ? '✓ Final Clearance →' : 'Submit to CEO ›';
+    document.getElementById('d-fin-submit-btn').textContent = isFinStep2 ? '✓ Final Clearance →' : 'Submit to CEO →';
     document.querySelector('#d-finance-panel .fin-panel-title').textContent = isFinStep2
       ? '📊 Finance Final Clearance — Step 6'
       : '📊 Finance Review — Outstanding, Production Cost & CEO Submission';
-    document.getElementById('d-fin-payment-text').value     = fa.paymentTerms || r.payment || '';
-    document.getElementById('d-fin-outstanding').value      = fa.outstanding || (isFinStep2 ? (r.approvals?.finance1?.outstanding||'') : '');
-    document.getElementById('d-fin-outstanding-note').value = fa.outstandingNote || '';
-    document.getElementById('d-fin-prod-cost').value        = fa.productionCost || '';
-    document.getElementById('d-fin-pl').value               = fa.pl || '';
-    document.getElementById('d-fin-remark').value           = fa.remark || '';
-    const revenue = (r.skus||[]).reduce(function(sum,s){return sum+(parseFloat(s.price)||0)*(parseFloat(s.qty)||0);},0);
-    const plAuto = document.getElementById('d-fin-pl-auto');
-    if (revenue > 0) {
-      plAuto.textContent = 'Order revenue (price×qty): ₹' + revenue.toLocaleString('en-IN');
-      if (!fa.pl) document.getElementById('d-fin-pl').value = revenue.toFixed(2);
+
+    // ① Customer summary
+    const revenue = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0),0);
+    const gstAmt  = (fa.gst==='Yes'||r.approvals?.finance1?.gst==='Yes') ? revenue*0.05 : 0;
+    const sumEl   = document.getElementById('d-fin-customer-summary');
+    if (sumEl) sumEl.innerHTML =
+      `<div class='info-item'><div class='ilabel'>Customer</div><div class='ivalue' style='font-weight:700'>${r.buyer||'—'}</div></div>`+
+      `<div class='info-item'><div class='ilabel'>Order No</div><div class='ivalue'>${r.dispatchId||'—'}</div></div>`+
+      `<div class='info-item'><div class='ilabel'>Dispatch Date</div><div class='ivalue'>${r.dispatchDate||'—'}</div></div>`+
+      `<div class='info-item'><div class='ilabel'>Payment Terms (Planner)</div><div class='ivalue'>${r.payment||'—'}</div></div>`+
+      `<div class='info-item'><div class='ilabel'>Vehicle Arrangement</div><div class='ivalue'>${r.vehicleArrangement||'—'}</div></div>`+
+      `<div class='info-item'><div class='ilabel'>Logistics Cost/Kg</div><div class='ivalue'>${r.logisticsCost?'₹'+r.logisticsCost:'—'}</div></div>`;
+
+    // ② SKU table
+    const skuTbl = document.getElementById('d-fin-sku-table');
+    if (skuTbl && r.skus) {
+      skuTbl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+        '<thead><tr style="background:#f0f4f8">'+
+        '<th style="padding:6px 8px;text-align:left">Product</th>'+
+        '<th style="padding:6px 8px;text-align:left">Spec</th>'+
+        '<th style="padding:6px 8px;text-align:right">Qty</th>'+
+        '<th style="padding:6px 8px;text-align:right">Price/unit</th>'+
+        '<th style="padding:6px 8px;text-align:right">Value</th>'+
+        '</tr></thead><tbody>'+
+        (r.skus||[]).map(s=>{
+          const val=(parseFloat(s.price)||0)*(parseFloat(s.qty)||0);
+          return '<tr style="border-bottom:1px solid #eee">'+
+            '<td style="padding:6px 8px">'+s.product+'</td>'+
+            '<td style="padding:6px 8px">'+s.spec+(s.subspec?' / '+s.subspec:'')+'</td>'+
+            '<td style="padding:6px 8px;text-align:right">'+s.qty+' '+s.qtyUnit+'</td>'+
+            '<td style="padding:6px 8px;text-align:right">₹'+parseFloat(s.price||0).toLocaleString('en-IN')+'</td>'+
+            '<td style="padding:6px 8px;text-align:right;font-weight:600">₹'+val.toLocaleString('en-IN')+'</td>'+
+            '</tr>';
+        }).join('')+'</tbody></table>';
+      const gstLabel = (fa.gst==='Yes') ? ' + ₹'+gstAmt.toLocaleString('en-IN')+' GST (5%)' : ' (GST not yet confirmed)';
+      document.getElementById('d-fin-invoice-total').textContent = 'Proforma Total: ₹'+revenue.toLocaleString('en-IN')+gstLabel;
     }
-    document.getElementById('d-fin-prod-cost').oninput = function(){
-      const cost=parseFloat(this.value)||0;
-      if(revenue>0) document.getElementById('d-fin-pl').value=(revenue-cost).toFixed(2);
+
+    // ③ Load compliance from memory (customer_compliance collection)
+    document.getElementById('d-fin-kyc').value           = fa.kyc || '';
+    document.getElementById('d-fin-gst').value           = fa.gst || '';
+    document.getElementById('d-fin-tcs').value           = fa.tcs || '';
+    document.getElementById('d-fin-credit-limit').value  = fa.creditLimit || '';
+    document.getElementById('d-fin-outstanding').value   = fa.outstanding || '';
+    document.getElementById('d-fin-outstanding-note').value = fa.outstandingNote || '';
+    if (r.buyer && db) {
+      db.collection('customer_compliance').doc(r.buyer).get().then(doc=>{
+        if (doc.exists) {
+          const cd = doc.data();
+          if (!fa.kyc)          document.getElementById('d-fin-kyc').value          = cd.kyc||'';
+          if (!fa.gst)          document.getElementById('d-fin-gst').value          = cd.gst||'';
+          if (!fa.tcs)          document.getElementById('d-fin-tcs').value          = cd.tcs||'';
+          if (!fa.creditLimit)  document.getElementById('d-fin-credit-limit').value = cd.creditLimit||'';
+          updateCreditFlag();
+        }
+      }).catch(()=>{});
+    }
+
+    // ④ Payment terms
+    const plannPay = document.getElementById('d-fin-planner-payment');
+    if (plannPay) plannPay.textContent = r.payment || '—';
+    document.getElementById('d-fin-payment-sel').value  = fa.paymentTermsSel || '';
+    document.getElementById('d-fin-payment-text').value = fa.paymentTermsTxt || '';
+
+    // ⑤ P&L fields
+    document.getElementById('d-fin-revenue').value    = revenue.toFixed(2);
+    document.getElementById('d-fin-prod-cost').value  = fa.productionCost || '';
+    document.getElementById('d-fin-logistics').value  = fa.logisticsCost || r.logisticsCost || '';
+    calcFinancePL();
+
+    // ⑥ Decision
+    document.getElementById('d-fin-decision').value     = fa.decision || 'approved';
+    document.getElementById('d-fin-hold-reason').value  = fa.holdReason || '';
+    document.getElementById('d-fin-hold-wrap').style.display = (fa.decision==='hold') ? 'block' : 'none';
+    document.getElementById('d-fin-remark').value       = fa.remark || '';
+
+    // Wire P&L auto-calc
+    ['d-fin-prod-cost','d-fin-logistics'].forEach(id=>{
+      document.getElementById(id).oninput = calcFinancePL;
+    });
+    document.getElementById('d-fin-outstanding').oninput = updateCreditFlag;
+    document.getElementById('d-fin-credit-limit').oninput = updateCreditFlag;
+    document.getElementById('d-fin-gst').onchange = ()=>{
+      const gstNow = document.getElementById('d-fin-gst').value==='Yes';
+      const rev = parseFloat(document.getElementById('d-fin-revenue').value)||0;
+      document.getElementById('d-fin-invoice-total').textContent = 'Proforma Total: ₹'+rev.toLocaleString('en-IN')+(gstNow?' + ₹'+(rev*0.05).toLocaleString('en-IN')+' GST (5%)':'');
     };
+    document.getElementById('d-fin-decision').onchange = function(){
+      document.getElementById('d-fin-hold-wrap').style.display = this.value==='hold' ? 'block' : 'none';
+    };
+    updateCreditFlag();
   } else {
     finPanel.style.display = 'none';
     actPanel.style.display = isMyTurn ? 'flex' : 'none';
@@ -1278,18 +1452,21 @@ function openDetail(id) {
   const finSummary = document.getElementById('d-finance-summary');
   if (finSummary) {
     const fa = r.approvals?.finance1 || {};
-    if (fa.status==='approved' && (fa.paymentTerms||fa.outstanding||fa.pl)) {
+    if (fa.status==='approved' || fa.status==='hold') {
       finSummary.style.display = 'block';
       const plNum = parseFloat(fa.pl)||0;
+      const exceeded = fa.creditLimit && fa.outstanding && (parseFloat(fa.outstanding)+((r.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0)),0))) > parseFloat(fa.creditLimit);
       finSummary.innerHTML =
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px">💼 Finance Review — Outstanding, Cost &amp; P&amp;L</div>'+
-        '<div class="info-grid" style="grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px">💼 Finance Review Summary</div>'+
+        '<div class="info-grid" style="grid-template-columns:repeat(3,1fr);gap:8px">'+
+        '<div class="info-item"><div class="ilabel">Decision</div><div class="ivalue" style="font-weight:700;color:'+(fa.decision==='hold'?'var(--red)':'var(--green)') +'">'+(fa.decision==='hold'?'⏸ HOLD: '+(fa.holdReason||''):'✅ Approved')+'</div></div>'+
         (fa.paymentTerms?'<div class="info-item"><div class="ilabel">Payment Terms</div><div class="ivalue">'+fa.paymentTerms+'</div></div>':'')+
-        (fa.outstanding?'<div class="info-item"><div class="ilabel">Customer Outstanding</div><div class="ivalue" style="color:var(--red);font-weight:700">₹'+parseFloat(fa.outstanding).toLocaleString('en-IN')+'</div></div>':'')+
-        (fa.productionCost?'<div class="info-item"><div class="ilabel">Production Cost</div><div class="ivalue">₹'+parseFloat(fa.productionCost).toLocaleString('en-IN')+'</div></div>':'')+
+        (fa.outstanding?'<div class="info-item"><div class="ilabel">Outstanding</div><div class="ivalue" style="color:var(--red);font-weight:700">₹'+parseFloat(fa.outstanding).toLocaleString('en-IN')+(exceeded?' 🚨':'')+'</div></div>':'')+
+        (fa.creditLimit?'<div class="info-item"><div class="ilabel">Credit Limit</div><div class="ivalue">₹'+parseFloat(fa.creditLimit).toLocaleString('en-IN')+'</div></div>':'')+
+        (fa.kyc?'<div class="info-item"><div class="ilabel">KYC</div><div class="ivalue">'+fa.kyc+'</div></div>':'')+
+        (fa.gst?'<div class="info-item"><div class="ilabel">GST</div><div class="ivalue">'+fa.gst+(fa.gst==='Yes'?' (5%)':'')+'</div></div>':'')+
         (fa.pl?'<div class="info-item"><div class="ilabel">Trade P&amp;L</div><div class="ivalue" style="font-weight:700;color:'+(plNum>=0?'var(--green)':'var(--red)')+'">₹'+plNum.toLocaleString('en-IN')+'</div></div>':'')+
-        (fa.outstandingNote?'<div class="info-item" style="grid-column:span 2"><div class="ilabel">Outstanding Note</div><div class="ivalue">'+fa.outstandingNote+'</div></div>':'')+
-        (fa.remark?'<div class="info-item" style="grid-column:span 2"><div class="ilabel">Finance Remarks</div><div class="ivalue">'+fa.remark+'</div></div>':'')+
+        (fa.remark?'<div class="info-item" style="grid-column:span 3"><div class="ilabel">Finance Remarks</div><div class="ivalue">'+fa.remark+'</div></div>':'')+
         '</div>';
     } else { finSummary.style.display='none'; }
   }
@@ -1316,38 +1493,124 @@ function closeDetail(e) {
 // ════════════════════════════════════════════════════════════════════
 // FINANCE SUBMIT TO CEO
 // ════════════════════════════════════════════════════════════════════
+
+function calcFinancePL() {
+  const rev      = parseFloat(document.getElementById('d-fin-revenue')?.value)||0;
+  const prodCost = parseFloat(document.getElementById('d-fin-prod-cost')?.value)||0;
+  const logCost  = parseFloat(document.getElementById('d-fin-logistics')?.value)||0;
+  const r        = allRequests.find(x=>x.id===activeReqId);
+  // total qty across SKUs (in Kg)
+  const totalKg  = (r?.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg'),0);
+  const totalCost= (prodCost + logCost) * totalKg;
+  const pl       = rev - totalCost;
+  const margin   = rev > 0 ? (pl/rev*100) : 0;
+  const tc = document.getElementById('d-fin-total-cost');
+  const plEl = document.getElementById('d-fin-pl');
+  const mgEl = document.getElementById('d-fin-margin');
+  if (tc) tc.value = totalCost.toFixed(2);
+  if (plEl) plEl.value = pl.toFixed(2);
+  if (mgEl) mgEl.value = margin.toFixed(1);
+  const plAuto = document.getElementById('d-fin-pl-auto');
+  if (plAuto) {
+    plAuto.textContent = 'Revenue ₹'+rev.toLocaleString('en-IN')+
+      ' − Cost ₹'+totalCost.toLocaleString('en-IN')+
+      ' = P&L ₹'+pl.toLocaleString('en-IN')+
+      ' ('+margin.toFixed(1)+'% margin)';
+    plAuto.style.color = pl >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+}
+
+function updateCreditFlag() {
+  const cl  = parseFloat(document.getElementById('d-fin-credit-limit')?.value)||0;
+  const out = parseFloat(document.getElementById('d-fin-outstanding')?.value)||0;
+  const r   = allRequests.find(x=>x.id===activeReqId);
+  const orderVal = (r?.skus||[]).reduce((s,k)=>(s+(parseFloat(k.price)||0)*(parseFloat(k.qty)||0)),0);
+  const el  = document.getElementById('d-fin-credit-flag');
+  if (!el) return;
+  if (!cl) { el.textContent='—'; el.style.background='#f0f4f8'; el.style.color='var(--slate)'; return; }
+  const exceeded = (out + orderVal) > cl;
+  el.textContent = exceeded ? '🚨 EXCEEDED' : '✅ Within Limit';
+  el.style.background = exceeded ? '#fee2e2' : '#d1fae5';
+  el.style.color = exceeded ? 'var(--red)' : 'var(--green)';
+  // Auto-set hold reason if exceeded
+  if (exceeded) {
+    const dec = document.getElementById('d-fin-decision');
+    const hr  = document.getElementById('d-fin-hold-reason');
+    const hw  = document.getElementById('d-fin-hold-wrap');
+    if (dec && dec.value !== 'hold') { dec.value='hold'; if(hw) hw.style.display='block'; }
+    if (hr && !hr.value) hr.value = 'Credit Limit Exceeded';
+  }
+}
+
 async function financeSubmit() {
   const r = allRequests.find(x => x.id === activeReqId);
   if (!r) return;
   const finKey  = getChainKey('Finance Approver', r);
   const isStep2 = finKey === 'finance2';
-  const payTerms    = document.getElementById('d-fin-payment-text').value.trim();
-  const outstanding = document.getElementById('d-fin-outstanding').value;
-  const outNote     = document.getElementById('d-fin-outstanding-note').value.trim();
-  const prodCost    = document.getElementById('d-fin-prod-cost').value;
-  const pl          = document.getElementById('d-fin-pl').value;
-  const remark      = document.getElementById('d-fin-remark').value.trim();
+
+  const decision     = document.getElementById('d-fin-decision').value;
+  const holdReason   = document.getElementById('d-fin-hold-reason').value;
+  const kyc          = document.getElementById('d-fin-kyc').value;
+  const gst          = document.getElementById('d-fin-gst').value;
+  const tcs          = document.getElementById('d-fin-tcs').value;
+  const creditLimit  = document.getElementById('d-fin-credit-limit').value;
+  const outstanding  = document.getElementById('d-fin-outstanding').value;
+  const outNote      = document.getElementById('d-fin-outstanding-note').value.trim();
+  const payTermsSel  = document.getElementById('d-fin-payment-sel').value;
+  const payTermsTxt  = document.getElementById('d-fin-payment-text').value.trim();
+  const payTerms     = payTermsSel && payTermsSel !== '' ? payTermsSel + (payTermsTxt ? ' — ' + payTermsTxt : '') : (payTermsTxt || r.payment || '');
+  const prodCost     = document.getElementById('d-fin-prod-cost').value;
+  const logistics    = document.getElementById('d-fin-logistics').value;
+  const pl           = document.getElementById('d-fin-pl').value;
+  const margin       = document.getElementById('d-fin-margin').value;
+  const remark       = document.getElementById('d-fin-remark').value.trim();
+
+  if (decision === 'hold' && !holdReason) { toast('Select a Hold reason before submitting', true); return; }
+
   const btn = document.getElementById('d-fin-submit-btn');
   btn.disabled = true; btn.textContent = 'Submitting...';
-  const nextStage = isStep2
-    ? 'Awaiting Dispatch Manager Confirmation'
-    : 'Awaiting CEO Approval';
+
   try {
+    // ── Save customer compliance to memory (per buyer) ──────────
+    if (r.buyer && (kyc || gst || tcs || creditLimit)) {
+      db.collection('customer_compliance').doc(r.buyer).set({
+        buyer: r.buyer,
+        kyc, gst, tcs,
+        creditLimit: creditLimit || '',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.email,
+      }, { merge: true });
+    }
+
+    const isHold = decision === 'hold';
+    const nextStage = isHold
+      ? 'Finance Hold: ' + (holdReason || 'Pending')
+      : (isStep2 ? 'Awaiting Dispatch Manager Confirmation' : 'Awaiting CEO Approval');
+
     const update = {
-      ['approvals.'+finKey+'.status']:           'approved',
-      ['approvals.'+finKey+'.time']:             firebase.firestore.FieldValue.serverTimestamp(),
-      ['approvals.'+finKey+'.remark']:           remark || (isStep2 ? 'Finance final clearance' : 'Finance review submitted to CEO'),
-      ['approvals.'+finKey+'.paymentTerms']:     payTerms,
-      ['approvals.'+finKey+'.outstanding']:      outstanding,
-      ['approvals.'+finKey+'.outstandingNote']:  outNote,
-      ['approvals.'+finKey+'.productionCost']:   prodCost,
-      ['approvals.'+finKey+'.pl']:               pl,
+      ['approvals.'+finKey+'.status']:          isHold ? 'hold' : 'approved',
+      ['approvals.'+finKey+'.time']:            firebase.firestore.FieldValue.serverTimestamp(),
+      ['approvals.'+finKey+'.remark']:          remark || (isStep2 ? 'Finance final clearance' : 'Finance review submitted to CEO'),
+      ['approvals.'+finKey+'.paymentTerms']:    payTerms,
+      ['approvals.'+finKey+'.outstanding']:     outstanding,
+      ['approvals.'+finKey+'.outstandingNote']: outNote,
+      ['approvals.'+finKey+'.productionCost']:  prodCost,
+      ['approvals.'+finKey+'.logisticsCost']:   logistics,
+      ['approvals.'+finKey+'.pl']:              pl,
+      ['approvals.'+finKey+'.margin']:          margin,
+      ['approvals.'+finKey+'.kyc']:             kyc,
+      ['approvals.'+finKey+'.gst']:             gst,
+      ['approvals.'+finKey+'.tcs']:             tcs,
+      ['approvals.'+finKey+'.creditLimit']:     creditLimit,
+      ['approvals.'+finKey+'.holdReason']:      holdReason || '',
+      ['approvals.'+finKey+'.decision']:        decision,
       stage: nextStage,
     };
+    if (isHold) update.status = 'pending'; // keep in pending for planner to see
     await db.collection('dispatch_requests').doc(activeReqId).update(update);
     document.getElementById('detailOverlay').classList.remove('open');
-    toast('✓ Submitted — ' + nextStage);
-  } catch(e) { toast('Error: '+e.message, true); }
+    toast(isHold ? '⏸ Order held: ' + holdReason : '✓ Submitted — ' + nextStage);
+  } catch(e) { toast('Error: ' + e.message, true); }
   btn.disabled = false; btn.textContent = isStep2 ? '✓ Final Clearance →' : 'Submit to CEO →';
 }
 
@@ -2132,6 +2395,12 @@ function initFormListeners() {
     });
   }
 
+  // Vehicle arrangement → show logistics cost if GL
+  const vaEl = document.getElementById('f-vehicle-arrangement');
+  if (vaEl) vaEl.addEventListener('change', function(){
+    const wrap = document.getElementById('f-logistics-cost-wrap');
+    if (wrap) wrap.style.display = this.value === 'GL' ? 'block' : 'none';
+  });
   // SKU list and Add SKU button are now seeded in showView('new-request')
 }
 
