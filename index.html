@@ -435,8 +435,9 @@
                 <input type="text" id="f-payment-others" placeholder="Specify payment terms...">
               </div>
             </div>
-            <div class="section-divider" style="margin-top:20px">SKU Line Items
-              <button type="button" class="btn btn-ghost btn-sm" id="addSkuBtn" style="margin-left:10px;font-size:11px">+ Add SKU</button>
+            <div class="section-divider" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">
+              <span>📦 SKU Line Items</span>
+              <button type="button" class="btn btn-primary btn-sm" id="addSkuBtn">+ Add SKU</button>
             </div>
             <div id="sku-list"></div>
             <div class="section-divider">Shipment</div>
@@ -714,13 +715,13 @@ async function saveEdit() {
 // ROLE MAP — email → role name
 // ════════════════════════════════════════════════════════════════════
 // ── WHO CAN DO WHAT ──────────────────────────────────────────────
-// Planners (Koel)            → Create requests, view all
-// Harish                     → Planner + Dispatch Manager (create + full edit/view)
+// Planners                   → Create requests, view all
+// Dispatch Manager           → Create + full edit/view)
 // Production Manager         → Approve Step 1
 // General Manager            → Approve Step 2 (Final approver)
 // QC Manager                 → Approve Step 3 (temperature clearance)
 // Finance Approver           → Approve Step 4 (payment clearance)
-// CEO (Sajith)               → View + Edit across all functions
+// CEO                        → View + Edit across all functions
 // Sales Head (Lalit)         → View-only
 
 // Emails encoded to prevent Netlify rewriting them
@@ -1114,7 +1115,7 @@ async function submitRequest() {
       product:skus[0].product, spec:skus[0].spec,
       location:document.getElementById('f-location').value,
       notes:document.getElementById('f-notes').value,
-      status:'pending', stage:'Awaiting Finance Review — Outstanding, Production Cost & CEO Submission (Mohan Krishna)', notifyFinance:true,
+      status:'pending', stage:'Awaiting Finance Review — Outstanding, Production Cost & CEO Submission', notifyFinance:true,
       submittedBy:currentUser.email, submittedByName:currentRole,
       createdAt:firebase.firestore.FieldValue.serverTimestamp(),
       approvals:{
@@ -1134,7 +1135,7 @@ async function submitRequest() {
     document.getElementById('sku-list').innerHTML='';
     skuCounter=0; addSkuRow();
     showView('dashboard');
-    toast('✓ Request '+dispatchId+' submitted to Finance (Mohan Krishna) for review.');
+    toast('✓ Request '+dispatchId+' submitted to Finance for review.');
   } catch(e){toast('Error: '+e.message,true);}
   btn.innerHTML='Submit for Approval'; btn.disabled=false;
 }
@@ -1206,7 +1207,7 @@ function openDetail(id) {
   ];
   ['finance1','ceo','gm','pm','qc','finance2','dispatch'].forEach((k,i) => {
     const a = r.approvals?.[k]||{};
-    const tlLabels=['Finance Review (Mohan)','CEO (Sajith)','GM (Siva S B)','PM (Praveen)','QC (Gopinath)','Finance Final Clearance (Mohan)','Dispatch Manager (Harish)'];
+    const tlLabels=['Finance Review','CEO','GM','PM','QC','Finance Final Clearance','Dispatch Manager'];
     tl.push({ who: tlLabels[i]||APPROVAL_CHAIN[i], status: a.status||'pending', note: a.remark||null, time: fmtTime(a.time) });
   });
   document.getElementById('d-timeline').innerHTML = tl.map(t => `
@@ -1316,8 +1317,8 @@ async function financeSubmit() {
   const btn = document.getElementById('d-fin-submit-btn');
   btn.disabled = true; btn.textContent = 'Submitting...';
   const nextStage = isStep2
-    ? 'Awaiting Dispatch Manager (Harish) Confirmation'
-    : 'Awaiting CEO (Sajith) Approval';
+    ? 'Awaiting Dispatch Manager Confirmation'
+    : 'Awaiting CEO Approval';
   try {
     const update = {
       ['approvals.'+finKey+'.status']:           'approved',
@@ -1350,7 +1351,7 @@ async function financeReject() {
       ['approvals.'+finKey+'.time']:   firebase.firestore.FieldValue.serverTimestamp(),
       ['approvals.'+finKey+'.remark']: remark,
       status: 'rejected',
-      stage: 'Rejected / Query by Finance (Mohan Krishna) — '+remark.slice(0,60),
+      stage: 'Rejected / Query by Finance — '+remark.slice(0,60),
     });
     document.getElementById('detailOverlay').classList.remove('open');
     toast('Request returned with query.', true);
@@ -1420,10 +1421,10 @@ async function doApprove() {
   const btn = document.getElementById('d-approve-btn');
   btn.innerHTML = '<span class="loading-spinner"></span>'; btn.disabled = true;
   const NEXT_STAGE = {
-    'ceo':      'Awaiting GM (Siva S B) Approval',
-    'gm':       'Awaiting PM (Praveen) Mathangi Sign-off',
-    'pm':       'Awaiting QC (Gopinath) Clearance',
-    'qc':       'Awaiting Finance Final Clearance — Step 6 (Mohan Krishna)',
+    'ceo':      'Awaiting GM Approval',
+    'gm':       'Awaiting PM Sign-off',
+    'pm':       'Awaiting QC Clearance',
+    'qc':       'Awaiting Finance Final Clearance — Step 6',
     'dispatch': '✅ Fully Approved — Loading Cleared',
   };
   try {
@@ -2120,32 +2121,8 @@ function initFormListeners() {
       }
     });
   }
-}
 
-// ── NEW REQUEST VIEW INITIALIZATION ──────────────────────────────────
-// This function is called every time the "New Dispatch Request" view is shown
-// to ensure the Add SKU button works and the form is properly initialized
-function initNewRequestView() {
-  // Attach Add SKU button event listener
-  const addBtn = document.getElementById('addSkuBtn');
-  if (addBtn) {
-    // Remove any existing listener to prevent duplicates
-    const newBtn = addBtn.cloneNode(true);
-    addBtn.parentNode.replaceChild(newBtn, addBtn);
-    newBtn.addEventListener('click', function(){ addSkuRow(); });
-  }
-
-  // Generate fresh order ID
-  const dispEl = document.getElementById('f-order-id-display');
-  if (dispEl) dispEl.textContent = 'Order No: DISP-' + Date.now().toString().slice(-6);
-
-  // Initialize SKU list with one empty row
-  const skuList = document.getElementById('sku-list');
-  if (skuList && skuList.children.length === 0) {
-    skuList.innerHTML = '';
-    skuCounter = 0;
-    addSkuRow();
-  }
+  // SKU list and Add SKU button are now seeded in showView('new-request')
 }
 
 function showView(name) {
@@ -2156,10 +2133,18 @@ function showView(name) {
   var navMap = {'dashboard':'nav-dashboard','new-request':'nav-new','pending':'nav-pending','all-requests':'nav-all','qc-checks':'nav-qc'};
   var nav = document.getElementById(navMap[name]);
   if (nav) nav.classList.add('active');
-  
-  // Initialize New Request view when it's shown
+  // Re-initialise new-request form each time it's shown
   if (name === 'new-request') {
-    initNewRequestView();
+    var skuList = document.getElementById('sku-list');
+    if (skuList) { skuList.innerHTML = ''; skuCounter = 0; addSkuRow(); }
+    var dispEl = document.getElementById('f-order-id-display');
+    if (dispEl) dispEl.textContent = 'Order No: DISP-' + Date.now().toString().slice(-6);
+    // Ensure Add SKU button is wired (safe to add multiple times — idempotent via flag)
+    var addBtn = document.getElementById('addSkuBtn');
+    if (addBtn && !addBtn._wired) {
+      addBtn.addEventListener('click', function(){ addSkuRow(); });
+      addBtn._wired = true;
+    }
   }
 }
 
