@@ -345,11 +345,20 @@
 
         <!-- Role-specific tab bar (Finance only, others see simple table) -->
         <div id="dash-tabs" style="display:none;margin-bottom:0;border-bottom:2px solid var(--border)">
-          <div style="display:flex;gap:0">
+          <!-- Finance tabs -->
+          <div id="dash-tabs-finance" style="display:none;flex;gap:0">
             <button class="dash-tab active" data-tab="pending-review"   onclick="switchDashTab(this,'pending-review')">🔔 Pending Review</button>
             <button class="dash-tab"        data-tab="submitted-ceo"    onclick="switchDashTab(this,'submitted-ceo')">📤 Forwarded to CEO</button>
             <button class="dash-tab"        data-tab="invoice-pending"  onclick="switchDashTab(this,'invoice-pending')">🧾 Invoice / E-Waybill Pending</button>
             <button class="dash-tab"        data-tab="invoice-done"     onclick="switchDashTab(this,'invoice-done')">✅ Invoice / E-Waybill Generated</button>
+          </div>
+          <!-- CEO strategic tabs -->
+          <div id="dash-tabs-ceo" style="display:none;flex;gap:0">
+            <button class="dash-tab active" data-tab="ceo-orders"     onclick="switchDashTab(this,'ceo-orders')">📦 Orders Received</button>
+            <button class="dash-tab"        data-tab="ceo-dispatched" onclick="switchDashTab(this,'ceo-dispatched')">🚚 Dispatched</button>
+            <button class="dash-tab"        data-tab="ceo-stock"      onclick="switchDashTab(this,'ceo-stock')">🏭 Stock &amp; Production</button>
+            <button class="dash-tab"        data-tab="ceo-pl"         onclick="switchDashTab(this,'ceo-pl')">📊 P&amp;L</button>
+            <button class="dash-tab"        data-tab="ceo-approval"   onclick="switchDashTab(this,'ceo-approval')">✅ Approval Queue</button>
           </div>
         </div>
 
@@ -713,6 +722,65 @@
         <button class="btn btn-green" id="d-approve-btn" data-action="approve">✓ Approve</button>
         <button class="btn btn-red" id="d-reject-btn" data-action="reject">✗ Reject</button>
       </div>
+
+
+        <!-- ═══ CEO REVIEW PANEL ════════════════════════ -->
+        <div id="d-ceo-panel" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:12px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#7c3aed;margin-bottom:16px">👑 CEO Review — Finance Summary &amp; Approval</div>
+
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">📋 Finance Review Summary</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" id="ceo-fin-summary"></div>
+          </div>
+
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">🧾 SKU / Proforma</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="background:#f0f4f8">
+                <th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--muted)">Product · Spec</th>
+                <th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--muted)">Qty (Kg)</th>
+                <th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--muted)">Price/Kg</th>
+                <th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--muted)">Value</th>
+              </tr></thead>
+              <tbody id="ceo-sku-rows"></tbody>
+              <tfoot id="ceo-sku-foot"></tfoot>
+            </table>
+          </div>
+
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">📊 P&amp;L</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px" id="ceo-pl-grid"></div>
+          </div>
+
+          <div id="ceo-hold-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:600;color:#991b1b"></div>
+
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">👑 CEO Decision</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+              <div class="field">
+                <label>Decision *</label>
+                <select id="ceo-decision" onchange="toggleCeoHoldReason()">
+                  <option value="approve">✅ Approve — Forward to GM</option>
+                  <option value="hold">⏸ Hold — Escalate to Finance</option>
+                  <option value="reject">✗ Reject</option>
+                </select>
+              </div>
+              <div class="field" id="ceo-hold-reason-wrap" style="display:none">
+                <label>Hold Reason *</label>
+                <select id="ceo-hold-reason">
+                  <option value="">— Select reason —</option>
+                  <option>Credit Risk</option><option>Pricing Concern</option>
+                  <option>Customer Outstanding</option><option>Strategic Hold</option><option>Others</option>
+                </select>
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <label>CEO Comments <span id="ceo-remark-req" style="color:var(--red);display:none">*</span></label>
+              <textarea id="ceo-remark" placeholder="Add CEO comments… (mandatory for Hold/Reject)" style="min-height:60px;resize:vertical"></textarea>
+            </div>
+            <button class="btn btn-primary" id="ceo-submit-btn" onclick="ceoSubmit()">Submit CEO Decision →</button>
+          </div>
+        </div>
 
       <!-- Planner withdraw / CEO modify panel -->
       <div id="d-modify-log" style="display:none;margin:0 24px 16px;padding:14px;border:1px solid #fcd34d;border-radius:8px;background:#fffef0"></div>
@@ -1431,6 +1499,147 @@ function refreshStockDeltaSummary() {
   if (rowsEl) rowsEl.innerHTML = lines.join('');
 }
 
+
+function getOrderStage(r) {
+  const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+  if (r.status==='approved') return 'done';
+  if (r.status==='rejected') return 'rejected';
+  for (const key of STEP_KEYS) {
+    const st = r.approvals?.[key]?.status;
+    if (!st || st==='pending') return key;
+    if (st==='hold') return key+'_hold';
+  }
+  return 'done';
+}
+
+function _renderCeoTab(tab, m, tb) {
+  const thead = document.getElementById('dash-thead');
+  const titleEl = document.getElementById('dash-table-title');
+  const toT = (kg) => (kg/1000).toFixed(2);
+
+  if (tab === 'ceo-orders') {
+    if (titleEl) titleEl.textContent = '📦 Orders Received — Month Till Date';
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>SKU Tonnage</th><th>Value (₹)</th><th>Stage</th><th>Action</th></tr>';
+    const mtdRows = m.allRequests.filter(r=>{const d=r.createdAt?.toDate?.();return d&&d>=m.mtdStart;});
+    if (!mtdRows.length) { tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="ei">📦</div><p>No orders this month yet.</p></td></tr>`; return; }
+    tb.innerHTML = mtdRows.map(r => {
+      const kg  = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const val = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const stage = getOrderStage(r);
+      const stageLbl = {finance1:'Finance Review',ceo:'CEO',gm:'GM',pm:'PM',qc:'QC',finance2:'Finance Invoice',dispatch:'Dispatch',done:'✅ Done'}[stage]||stage;
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-size:12px">${r.dispatchDate||'—'}</td>
+        <td style="font-weight:600">${toT(kg)} T <span style="font-size:10px;color:var(--muted)">(${kg} Kg)</span></td>
+        <td style="font-weight:600">₹${val.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td style="font-size:12px;color:var(--slate)">${stageLbl}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
+      </tr>`;
+    }).join('');
+
+  } else if (tab === 'ceo-dispatched') {
+    if (titleEl) titleEl.textContent = '🚚 Dispatched — Month Till Date';
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>Tonnage</th><th>Value (₹)</th><th>Action</th></tr>';
+    const disp = m.allRequests.filter(r=>{const d=r.createdAt?.toDate?.();return d&&d>=m.mtdStart&&r.status==='approved';});
+    if (!disp.length) { tb.innerHTML=`<tr><td colspan="6" class="empty"><div class="ei">🚚</div><p>No dispatches this month.</p></td></tr>`; return; }
+    tb.innerHTML = disp.map(r => {
+      const kg  = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const val = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-size:12px">${r.dispatchDate||'—'}</td>
+        <td style="font-weight:600">${toT(kg)} T</td>
+        <td>₹${val.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
+      </tr>`;
+    }).join('');
+
+  } else if (tab === 'ceo-stock') {
+    if (titleEl) titleEl.textContent = '🏭 Stock & Production Status';
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Ordered (T)</th><th>Stock Available (T)</th><th>To Produce (T)</th><th>QC Cleared (T)</th><th>Action</th></tr>';
+    const active = m.allRequests.filter(r=>r.status==='pending');
+    if (!active.length) { tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="ei">🏭</div><p>No active orders.</p></td></tr>`; return; }
+    tb.innerHTML = active.map(r => {
+      const ordKg   = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const stockKg = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.stocksAvailable)||0)*10,0);
+      const toProKg = Math.max(0, ordKg - stockKg);
+      const qcKg    = r.approvals?.qc?.status==='approved' ? ordKg : 0;
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-weight:600">${toT(ordKg)} T</td>
+        <td style="color:${stockKg>=ordKg?'var(--green)':'var(--amber)'};font-weight:600">${toT(stockKg)} T</td>
+        <td style="color:${toProKg>0?'var(--red)':'var(--green)'};font-weight:600">${toT(toProKg)} T</td>
+        <td style="color:${qcKg>0?'var(--green)':'var(--slate)'};font-weight:600">${toT(qcKg)} T</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
+      </tr>`;
+    }).join('');
+
+  } else if (tab === 'ceo-pl') {
+    if (titleEl) titleEl.textContent = '📊 P&L Overview';
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Revenue (₹)</th><th>Prod Cost (₹)</th><th>Logistics (₹)</th><th>P&L (₹)</th><th>Margin %</th></tr>';
+    const finReviewed = m.allRequests.filter(r=>r.approvals?.finance1?.status==='approved');
+    if (!finReviewed.length) { tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="ei">📊</div><p>No finance-reviewed orders yet.</p></td></tr>`; return; }
+    let totRev=0,totPL=0;
+    tb.innerHTML = finReviewed.map(r => {
+      const fa  = r.approvals?.finance1||{};
+      const rev = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const kg  = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const prd = (parseFloat(fa.productionCost)||0)*kg;
+      const log = (parseFloat(fa.logisticsCost)||0)*kg;
+      const pl  = parseFloat(fa.pl)||0;
+      const mar = parseFloat(fa.margin)||0;
+      totRev+=rev; totPL+=pl;
+      const plColor = pl>=0?'var(--green)':'var(--red)';
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td>₹${rev.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td>₹${prd.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td>₹${log.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td style="font-weight:700;color:${plColor}">₹${pl.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td style="font-weight:700;color:${plColor}">${mar?mar+'%':'—'}</td>
+      </tr>`;
+    }).join('') +
+    `<tr style="background:#f0f4f8;font-weight:700">
+      <td colspan="2">TOTAL</td>
+      <td>₹${totRev.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+      <td></td><td></td>
+      <td style="color:${totPL>=0?'var(--green)':'var(--red)'}">₹${totPL.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+      <td style="color:${totPL>=0?'var(--green)':'var(--red)'}">${totRev>0?((totPL/totRev)*100).toFixed(1)+'%':'—'}</td>
+    </tr>`;
+
+  } else if (tab === 'ceo-approval') {
+    if (titleEl) titleEl.textContent = '✅ Approval Queue — Pending CEO Action';
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>Value (₹)</th><th>Finance Decision</th><th>P&L</th><th>Action</th></tr>';
+    if (!m.pendingCEO.length) { tb.innerHTML=`<tr><td colspan="7" class="empty"><div class="ei">✅</div><p>No orders pending your approval.</p></td></tr>`; return; }
+    tb.innerHTML = m.pendingCEO.map(r => {
+      const fa  = r.approvals?.finance1||{};
+      const val = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      const plColor = parseFloat(fa.pl)>=0?'var(--green)':'var(--red)';
+      return `<tr>
+        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
+        <td style="font-weight:600">${r.buyer||'—'}</td>
+        <td style="font-size:12px">${r.dispatchDate||'—'}</td>
+        <td style="font-weight:600">₹${val.toLocaleString('en-IN',{maximumFractionDigits:0})}</td>
+        <td><span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700">✅ Approved by Finance</span></td>
+        <td style="font-weight:700;color:${plColor}">${fa.pl?'₹'+parseFloat(fa.pl).toLocaleString('en-IN',{maximumFractionDigits:0}):'—'}${fa.margin?' ('+fa.margin+'%)':''}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="openDetail('${r.id}')">Review ›</button></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function toggleCeoHoldReason() {
+  const dec = document.getElementById('ceo-decision')?.value;
+  const wrap = document.getElementById('ceo-hold-reason-wrap');
+  const req  = document.getElementById('ceo-remark-req');
+  if (wrap) wrap.style.display = dec==='hold' ? 'block' : 'none';
+  if (req)  req.style.display  = (dec==='hold'||dec==='reject') ? 'inline' : 'none';
+}
+
 function pill(status, label) {
   const text = label || status || 'pending';
   const s = (status || 'pending').toLowerCase();
@@ -1486,6 +1695,10 @@ function renderDashboard() {
   // ── FINANCE — 4-tab dashboard ────────────────────────────────
   if (currentRole === 'Finance Approver') {
     if (tabs) tabs.style.display = 'block';
+    const ftabsF = document.getElementById('dash-tabs-finance');
+    const ctabsF = document.getElementById('dash-tabs-ceo');
+    if (ftabsF) ftabsF.style.display = 'flex';
+    if (ctabsF) ctabsF.style.display = 'none';
     const buckets = {'pending-review':[],'submitted-ceo':[],'invoice-pending':[],'invoice-done':[]};
     allRequests.forEach(r => {
       const f1 = r.approvals?.finance1?.status;
@@ -1502,9 +1715,10 @@ function renderDashboard() {
       _statCard('📤 Forwarded to CEO',    buckets['submitted-ceo'].length,   'var(--blue)',  "switchDashTab(document.querySelector('[data-tab=\"submitted-ceo\"]'),   'submitted-ceo')")+
       _statCard('🧾 Invoice/E-Way Pend.', buckets['invoice-pending'].length, 'var(--red)',   "switchDashTab(document.querySelector('[data-tab=\"invoice-pending\"]'), 'invoice-pending')")+
       _statCard('✅ Invoice/E-Way Done',  buckets['invoice-done'].length,    'var(--green)', "switchDashTab(document.querySelector('[data-tab=\"invoice-done\"]'),    'invoice-done')");
-    const activeTab = document.querySelector('.dash-tab.active')?.dataset?.tab || 'pending-review';
+    const activeTab = (window._activeTab && !window._activeTab.startsWith('ceo-')) ? window._activeTab : 'pending-review';
     _renderFinanceBucket(buckets[activeTab], activeTab, tb);
-    document.querySelectorAll('.dash-tab').forEach(btn => {
+    document.querySelectorAll('#dash-tabs-finance .dash-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === activeTab);
       const t = btn.dataset.tab;
       const n = buckets[t]?.length || 0;
       btn.textContent = {'pending-review':'🔔 Pending Review','submitted-ceo':'📤 Forwarded to CEO',
@@ -1514,60 +1728,141 @@ function renderDashboard() {
     return;
   }
 
-  // ── PLANNER / CEO — full pipeline overview ───────────────────
-  if (['Planner','CEO'].includes(currentRole)) {
-    if (tabs) tabs.style.display = 'none';
-
-    // Pipeline stat cards — count per stage
-    const pipelineCounts = {};
-    STEP_KEYS.forEach(k => pipelineCounts[k] = 0);
-    let approvedCount = 0, totalCount = allRequests.length;
-    allRequests.forEach(r => {
-      const stage = getOrderStage(r);
-      if (stage === 'done') approvedCount++;
-      else if (STEP_KEYS.includes(stage)) pipelineCounts[stage]++;
-    });
-
-    if (stats) stats.innerHTML =
-      STEP_KEYS.map(k =>
-        _statCard(STEP_LABELS[k], pipelineCounts[k], pipelineCounts[k]>0?'var(--amber)':'var(--green)',
-          `showPipelineFilter('${k}')`)
-      ).join('') +
-      _statCard('✅ Fully Approved', approvedCount, 'var(--green)', "showPipelineFilter('done')") +
-      _statCard('📦 Total', totalCount, 'var(--navy)', "showPipelineFilter('all')");
-
-    // Table header
-    const thead = document.getElementById('dash-thead');
-    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>Current Stage</th><th>Status</th><th>Action</th></tr>';
-
-    // Show all requests with current stage indicator
-    const filter = window._dashPipelineFilter || 'all';
-    const rows = allRequests.filter(r => {
-      if (filter === 'all') return true;
-      if (filter === 'done') return r.status === 'approved';
-      return getOrderStage(r) === filter;
-    });
-
-    const titleEl = document.getElementById('dash-table-title');
-    if (titleEl) titleEl.textContent = filter==='all' ? 'All Dispatch Requests' :
-      filter==='done' ? '✅ Fully Approved' : ('Pending at: ' + (STEP_LABELS[filter]||filter));
+  // ── CEO — 5-tab strategic dashboard ─────────────────
+  if (currentRole === 'CEO') {
+    if (tabs)  tabs.style.display  = 'block';
+    const ftabs = document.getElementById('dash-tabs-finance');
+    const ctabs = document.getElementById('dash-tabs-ceo');
+    if (ftabs) ftabs.style.display = 'none';
+    if (ctabs) ctabs.style.display = 'flex';
 
     showDashExport(true);
-    if (!rows.length) {
-      tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>No requests in this category.</p></td></tr>`;
-      return;
-    }
 
+    // Get current month boundaries for MTD
+    const now = new Date();
+    const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const KG_PER_TON = 1000; const CASE_PER_TON = 100;
+    const toTon = (kg) => (kg / KG_PER_TON);
+
+    // Compute metrics from allRequests
+    let mtdOrderTon=0, mtdDispatchTon=0, stockAvailKg=0, toProduceKg=0, qcClearedKg=0;
+    let totalRevenue=0, totalCost=0, totalPL=0;
+    const pendingCEO = [];
+
+    allRequests.forEach(r => {
+      const created = r.createdAt?.toDate ? r.createdAt.toDate() : null;
+      const isMTD   = created && created >= mtdStart;
+      const skuKg   = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg'), 0);
+      const skuRev  = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'), 0);
+
+      if (isMTD) mtdOrderTon += toTon(skuKg);
+      if (isMTD && r.status==='approved') mtdDispatchTon += toTon(skuKg);
+
+      // Stock: sum GL+CF from SKU rows
+      (r.skus||[]).forEach(s => {
+        stockAvailKg  += (parseFloat(s.stocksAvailable)||0) * 10; // Cases→Kg
+      });
+
+      // P&L from finance approvals
+      const fa = r.approvals?.finance1 || {};
+      if (fa.pl)      totalPL      += parseFloat(fa.pl)      || 0;
+      if (fa.margin)  {} // margin is %, skip summing
+      if (skuRev)     totalRevenue += skuRev;
+      const prodCostKg = parseFloat(fa.productionCost)||0;
+      const logKg      = parseFloat(fa.logisticsCost)||0;
+      totalCost += (prodCostKg + logKg) * skuKg;
+
+      // CEO pending approval queue
+      if (r.status==='pending' &&
+          r.approvals?.finance1?.status==='approved' &&
+          (!r.approvals?.ceo || r.approvals.ceo.status==='pending')) {
+        pendingCEO.push(r);
+      }
+    });
+
+    // toProduceKg = orders pending, not yet dispatched
+    toProduceKg = allRequests
+      .filter(r=>r.status==='pending')
+      .reduce((s,r)=>(r.skus||[]).reduce((a,k)=>a+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),s), 0);
+
+    // qcClearedKg = orders that passed QC
+    qcClearedKg = allRequests
+      .filter(r=>r.approvals?.qc?.status==='approved')
+      .reduce((s,r)=>(r.skus||[]).reduce((a,k)=>a+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),s), 0);
+
+    // Stat cards
+    const margin = totalRevenue > 0 ? ((totalPL/totalRevenue)*100).toFixed(1) : '—';
+    if (stats) stats.innerHTML =
+      _statCard('📦 MTD Orders', mtdOrderTon.toFixed(2)+' T', 'var(--navy)',  "switchDashTab(document.querySelector('[data-tab="ceo-orders"]'),'ceo-orders')")+
+      _statCard('🚚 MTD Dispatched', mtdDispatchTon.toFixed(2)+' T', 'var(--blue)',  "switchDashTab(document.querySelector('[data-tab="ceo-dispatched"]'),'ceo-dispatched')")+
+      _statCard('🏭 To Produce', toTon(toProduceKg).toFixed(2)+' T', 'var(--amber)', "switchDashTab(document.querySelector('[data-tab="ceo-stock"]'),'ceo-stock')")+
+      _statCard('✅ QC Cleared', toTon(qcClearedKg).toFixed(2)+' T', 'var(--green)', "switchDashTab(document.querySelector('[data-tab="ceo-stock"]'),'ceo-stock')")+
+      _statCard('📊 P&L', '₹'+totalPL.toLocaleString('en-IN',{maximumFractionDigits:0}), totalPL>=0?'var(--green)':'var(--red)', "switchDashTab(document.querySelector('[data-tab="ceo-pl"]'),'ceo-pl')")+
+      _statCard('🔔 Pending Approval', pendingCEO.length, 'var(--amber)', "switchDashTab(document.querySelector('[data-tab="ceo-approval"]'),'ceo-approval')");
+
+    // Render active tab
+    const activeTab = (window._activeTab && window._activeTab.startsWith('ceo-')) ? window._activeTab : 'ceo-orders';
+    _renderCeoTab(activeTab, {allRequests, pendingCEO, mtdStart, toTon, KG_PER_TON,
+      mtdOrderTon, mtdDispatchTon, toProduceKg, qcClearedKg, totalRevenue, totalCost, totalPL}, tb);
+
+    document.querySelectorAll('#dash-tabs-ceo .dash-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === activeTab);
+      const counts = {'ceo-orders': allRequests.filter(r=>{const d=r.createdAt?.toDate?.();return d&&d>=mtdStart;}).length,
+        'ceo-dispatched': allRequests.filter(r=>r.status==='approved').length,
+        'ceo-stock':'', 'ceo-pl':'', 'ceo-approval': pendingCEO.length};
+      const n = counts[btn.dataset.tab];
+      const labels = {'ceo-orders':'📦 Orders Received','ceo-dispatched':'🚚 Dispatched',
+        'ceo-stock':'🏭 Stock & Production','ceo-pl':'📊 P&L','ceo-approval':'✅ Approval Queue'};
+      btn.textContent = labels[btn.dataset.tab] + (n?` (${n})`:'');
+    });
+    return;
+  }
+
+  // ── PLANNER — pipeline overview ───────────────────────────────
+  if (currentRole === 'Planner') {
+    const ftabs = document.getElementById('dash-tabs-finance');
+    const ctabs = document.getElementById('dash-tabs-ceo');
+    if (ftabs) ftabs.style.display = 'none';
+    if (ctabs) ctabs.style.display = 'none';
+    if (tabs)  tabs.style.display  = 'none';
+
+    const STEP_LABELS2 = {finance1:'Finance Review',ceo:'CEO',gm:'GM',pm:'PM',qc:'QC',finance2:'Finance Invoice',dispatch:'Dispatch'};
+    const STEP_KEYS2   = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
+    const pipelineCounts = {};
+    STEP_KEYS2.forEach(k => pipelineCounts[k] = 0);
+    let approvedCount = 0;
+    allRequests.forEach(r => {
+      if (r.status==='approved') { approvedCount++; return; }
+      const stage = getOrderStage(r);
+      if (STEP_KEYS2.includes(stage)) pipelineCounts[stage]++;
+    });
+    if (stats) stats.innerHTML =
+      STEP_KEYS2.map(k => _statCard(STEP_LABELS2[k], pipelineCounts[k],
+        pipelineCounts[k]>0?'var(--amber)':'var(--green)', `showPipelineFilter('${k}')`)).join('') +
+      _statCard('✅ Approved', approvedCount, 'var(--green)', "showPipelineFilter('done')") +
+      _statCard('📦 Total', allRequests.length, 'var(--navy)', "showPipelineFilter('all')");
+
+    showDashExport(true);
+    const thead = document.getElementById('dash-thead');
+    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>Current Stage</th><th>Status</th><th>Action</th></tr>';
+    const filter = window._dashPipelineFilter || 'all';
+    const titleEl = document.getElementById('dash-table-title');
+    if (titleEl) titleEl.textContent = filter==='all'?'All Requests':filter==='done'?'✅ Fully Approved':'Pending at: '+(STEP_LABELS2[filter]||filter);
+    const rows = allRequests.filter(r => {
+      if (filter==='all') return true;
+      if (filter==='done') return r.status==='approved';
+      return getOrderStage(r)===filter;
+    });
+    if (!rows.length) { tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>No requests here.</p></td></tr>`; return; }
     tb.innerHTML = rows.map(r => {
       const stage = getOrderStage(r);
-      const isApproved = stage === 'done';
-      const stageName = isApproved ? '✅ Fully Approved' : (STEP_LABELS[stage] ? '⏳ Pending at ' + STEP_LABELS[stage] : stage);
-      const stageColor = isApproved ? 'var(--green)' : 'var(--amber)';
+      const isApproved = stage==='done';
+      const stageName = isApproved?'✅ Fully Approved':('⏳ Pending at '+(STEP_LABELS2[stage]||stage));
       return `<tr>
         <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
         <td style="font-weight:600">${r.buyer||'—'}</td>
         <td style="font-size:12px">${r.dispatchDate||'—'}</td>
-        <td style="font-size:12px;font-weight:600;color:${stageColor}">${stageName}</td>
+        <td style="font-size:12px;font-weight:600;color:${isApproved?'var(--green)':'var(--amber)'}">${stageName}</td>
         <td>${pill(r.status)}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
       </tr>`;
@@ -1665,10 +1960,7 @@ function _renderFinanceBucket(rows, tab, tb) {
 }
 
 function switchDashTab(el, tab) {
-  document.querySelectorAll('.dash-tab').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  const tb = document.getElementById('dashboardTable');
-  // Re-run renderDashboard which will pick up new active tab
+  window._activeTab = tab;
   renderDashboard();
 }
 
@@ -2184,7 +2476,77 @@ function openDetail(id) {
     updateCreditFlag();
   } else {
     finPanel.style.display = 'none';
+    // CEO gets custom panel instead of generic actPanel
+  const ceoPanel = document.getElementById('d-ceo-panel');
+  if (currentRole === 'CEO') {
+    actPanel.style.display = 'none';
+    if (ceoPanel) {
+      ceoPanel.style.display = isMyTurn ? 'block' : 'none';
+      if (isMyTurn) {
+        // Populate finance summary
+        const fa = r.approvals?.finance1 || {};
+        const ceoFinSum = document.getElementById('ceo-fin-summary');
+        if (ceoFinSum) ceoFinSum.innerHTML = [
+          ['KYC',fa.kyc||'—'],['GST',fa.gst||'—'],['TCS',fa.tcs||'—'],
+          ['Credit Limit','₹'+(fa.creditLimit||'—')],['Outstanding','₹'+(fa.outstanding||'—')],
+          ['Payment Terms',fa.paymentTerms||r.payment||'—'],
+          ['Production Cost/Kg','₹'+(fa.productionCost||'—')],
+          ['Logistics/Kg','₹'+(fa.logisticsCost||'—')],
+          ['Finance Decision', fa.decision==='hold'?'⏸ Hold: '+(fa.holdReason||''):'✅ Approved'],
+        ].map(([l,v])=>`<div style="background:#f8fafc;border-radius:6px;padding:8px 10px">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${l}</div>
+          <div style="font-size:13px;font-weight:600">${v}</div></div>`).join('');
+
+        // Finance hold banner
+        const holdBanner = document.getElementById('ceo-hold-banner');
+        if (holdBanner) {
+          holdBanner.style.display = fa.holdReason ? 'block' : 'none';
+          holdBanner.textContent = fa.holdReason ? '⚠️ Finance flagged: ' + fa.holdReason : '';
+        }
+
+        // SKU table
+        const skuRows = document.getElementById('ceo-sku-rows');
+        const skuFoot = document.getElementById('ceo-sku-foot');
+        if (skuRows) {
+          let tot = 0;
+          skuRows.innerHTML = (r.skus||[]).map(s=>{
+            const kg  = toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
+            const val = (parseFloat(s.price)||0)*kg;
+            tot += val;
+            const lbl = [s.product,s.spec,s.subspec].filter(Boolean).join(' · ');
+            return `<tr><td style="padding:5px 8px">${lbl}</td>
+              <td style="padding:5px 8px;text-align:right">${kg}</td>
+              <td style="padding:5px 8px;text-align:right">₹${parseFloat(s.price)||'—'}</td>
+              <td style="padding:5px 8px;text-align:right;font-weight:600">₹${val.toLocaleString('en-IN',{maximumFractionDigits:0})}</td></tr>`;
+          }).join('');
+          if (skuFoot) skuFoot.innerHTML = `<tr style="background:#f0f4f8;font-weight:700">
+            <td colspan="3" style="padding:6px 8px">Total</td>
+            <td style="padding:6px 8px;text-align:right">₹${tot.toLocaleString('en-IN',{maximumFractionDigits:0})}</td></tr>`;
+        }
+
+        // P&L grid
+        const plGrid = document.getElementById('ceo-pl-grid');
+        if (plGrid) plGrid.innerHTML = [
+          ['Revenue','₹'+(fa.pl&&fa.productionCost?(((parseFloat(fa.pl)||0)+(parseFloat(fa.productionCost)||0)*(r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0))).toLocaleString('en-IN',{maximumFractionDigits:0}):'—'),'var(--navy)'],
+          ['Production Cost/Kg','₹'+(fa.productionCost||'—'),'var(--slate)'],
+          ['P&L','₹'+(fa.pl?parseFloat(fa.pl).toLocaleString('en-IN',{maximumFractionDigits:0}):'—'),parseFloat(fa.pl)>=0?'var(--green)':'var(--red)'],
+          ['Margin',(fa.margin?fa.margin+'%':'—'),parseFloat(fa.margin)>=0?'var(--green)':'var(--red)'],
+        ].map(([l,v,c])=>`<div style="background:#f8fafc;border-radius:6px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:3px">${l}</div>
+          <div style="font-size:16px;font-weight:700;color:${c}">${v}</div></div>`).join('');
+
+        // Reset decision fields
+        const decEl = document.getElementById('ceo-decision');
+        if (decEl) decEl.value = 'approve';
+        const remEl = document.getElementById('ceo-remark');
+        if (remEl) remEl.value = '';
+        toggleCeoHoldReason();
+      }
+    }
+  } else {
+    if (ceoPanel) ceoPanel.style.display = 'none';
     actPanel.style.display = isMyTurn ? 'flex' : 'none';
+  }
     document.getElementById('d-remark').value = '';
   }
 
@@ -2305,6 +2667,59 @@ function updateCreditFlag() {
     if (dec && dec.value !== 'hold') { dec.value='hold'; if(hw) hw.style.display='block'; }
     if (hr && !hr.value) hr.value = 'Credit Limit Exceeded';
   }
+}
+
+
+async function ceoSubmit() {
+  const r = allRequests.find(x => x.id === activeReqId);
+  if (!r) return;
+  const decision   = document.getElementById('ceo-decision')?.value;
+  const holdReason = document.getElementById('ceo-hold-reason')?.value;
+  const remark     = document.getElementById('ceo-remark')?.value?.trim();
+
+  if (!decision) { toast('Select a decision', true); return; }
+  if ((decision==='hold'||decision==='reject') && !remark) {
+    toast('CEO comments are mandatory for Hold / Reject', true); return; }
+  if (decision==='hold' && !holdReason) {
+    toast('Please select a hold reason', true); return; }
+
+  const btn = document.getElementById('ceo-submit-btn');
+  btn.innerHTML = '<span class="loading-spinner"></span> Submitting…'; btn.disabled = true;
+
+  try {
+    let update = {};
+    if (decision === 'approve') {
+      update = {
+        'approvals.ceo.status': 'approved',
+        'approvals.ceo.remark': remark || 'CEO Approved',
+        'approvals.ceo.time':   firebase.firestore.FieldValue.serverTimestamp(),
+        stage: 'Awaiting GM Approval',
+      };
+      toast('✓ CEO Approved — forwarded to GM');
+    } else if (decision === 'hold') {
+      update = {
+        'approvals.ceo.status':     'hold',
+        'approvals.ceo.holdReason': holdReason,
+        'approvals.ceo.remark':     remark,
+        'approvals.ceo.time':       firebase.firestore.FieldValue.serverTimestamp(),
+        stage: 'CEO Hold: ' + holdReason + ' — ' + remark.slice(0,60),
+        status: 'pending',
+      };
+      toast('⏸ Order held by CEO: ' + holdReason);
+    } else {
+      update = {
+        'approvals.ceo.status': 'rejected',
+        'approvals.ceo.remark': remark,
+        'approvals.ceo.time':   firebase.firestore.FieldValue.serverTimestamp(),
+        stage:  'Rejected by CEO: ' + remark.slice(0,80),
+        status: 'rejected',
+      };
+      toast('✗ Order rejected by CEO');
+    }
+    await db.collection('dispatch_requests').doc(activeReqId).update(update);
+    document.getElementById('detailOverlay').classList.remove('open');
+  } catch(e) { toast('Error: '+e.message, true); }
+  btn.innerHTML = 'Submit CEO Decision →'; btn.disabled = false;
 }
 
 async function financeSubmit() {
