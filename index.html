@@ -1793,12 +1793,12 @@ function renderDashboard() {
     // Stat cards
     const margin = totalRevenue > 0 ? ((totalPL/totalRevenue)*100).toFixed(1) : '—';
     if (stats) stats.innerHTML =
-      _statCard('📦 MTD Orders', mtdOrderTon.toFixed(2)+' T', 'var(--navy)',  "switchDashTab(document.querySelector('[data-tab="ceo-orders"]'),'ceo-orders')")+
-      _statCard('🚚 MTD Dispatched', mtdDispatchTon.toFixed(2)+' T', 'var(--blue)',  "switchDashTab(document.querySelector('[data-tab="ceo-dispatched"]'),'ceo-dispatched')")+
-      _statCard('🏭 To Produce', toTon(toProduceKg).toFixed(2)+' T', 'var(--amber)', "switchDashTab(document.querySelector('[data-tab="ceo-stock"]'),'ceo-stock')")+
-      _statCard('✅ QC Cleared', toTon(qcClearedKg).toFixed(2)+' T', 'var(--green)', "switchDashTab(document.querySelector('[data-tab="ceo-stock"]'),'ceo-stock')")+
-      _statCard('📊 P&L', '₹'+totalPL.toLocaleString('en-IN',{maximumFractionDigits:0}), totalPL>=0?'var(--green)':'var(--red)', "switchDashTab(document.querySelector('[data-tab="ceo-pl"]'),'ceo-pl')")+
-      _statCard('🔔 Pending Approval', pendingCEO.length, 'var(--amber)', "switchDashTab(document.querySelector('[data-tab="ceo-approval"]'),'ceo-approval')");
+      _statCard('📦 MTD Orders', mtdOrderTon.toFixed(2)+' T', 'var(--navy)', "window._activeTab='ceo-orders';renderDashboard()")+
+      _statCard('🚚 MTD Dispatched', mtdDispatchTon.toFixed(2)+' T', 'var(--blue)', "window._activeTab='ceo-dispatched';renderDashboard()")+
+      _statCard('🏭 To Produce', toTon(toProduceKg).toFixed(2)+' T', 'var(--amber)', "window._activeTab='ceo-stock';renderDashboard()")+
+      _statCard('✅ QC Cleared', toTon(qcClearedKg).toFixed(2)+' T', 'var(--green)', "window._activeTab='ceo-stock';renderDashboard()")+
+      _statCard('📊 P&L', '₹'+totalPL.toLocaleString('en-IN',{maximumFractionDigits:0}), totalPL>=0?'var(--green)':'var(--red)', "window._activeTab='ceo-pl';renderDashboard()")+
+      _statCard('🔔 Pending Approval', pendingCEO.length, 'var(--amber)', "window._activeTab='ceo-approval';renderDashboard()");
 
     // Render active tab
     const activeTab = (window._activeTab && window._activeTab.startsWith('ceo-')) ? window._activeTab : 'ceo-orders';
