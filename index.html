@@ -3476,7 +3476,11 @@ function addSkuRow(prefill){
   div.querySelector('.sku-stock-gl').addEventListener('input',function(){ syncTotalFromBreakup(div); });
   div.querySelector('.sku-stock-cf').addEventListener('input',function(){ syncTotalFromBreakup(div); });
 
-  document.getElementById('sku-list').appendChild(div);
+  var _skuContainer = document.getElementById('sku-list');
+  if (!_skuContainer) { console.error('[GL] addSkuRow: sku-list NOT FOUND at appendChild time!'); return; }
+  console.log('[GL] addSkuRow: appending div to sku-list');
+  _skuContainer.appendChild(div);
+  console.log('[GL] addSkuRow: div appended successfully');
 
   // ── PREFILL (from stock lookup) ──────────────────────────────────
   if(prefill){
@@ -3754,16 +3758,22 @@ function showView(name) {
   if (nav) nav.classList.add('active');
   // Re-initialise new-request form each time it's shown
   if (name === 'new-request') {
+    console.log('[GL] showView: new-request triggered');
     var skuList = document.getElementById('sku-list');
+    console.log('[GL] sku-list element found:', !!skuList);
     if (skuList) {
       try {
-        skuList.innerHTML = '';
+        skuList.innerHTML = '<p style="color:var(--muted);padding:12px;font-size:12px">Loading form...</p>';
         skuCounter = 0;
+        console.log('[GL] calling addSkuRow...');
         addSkuRow();
+        console.log('[GL] addSkuRow completed, sku-list children:', skuList.children.length);
       } catch(err) {
-        console.error('addSkuRow error:', err);
-        skuList.innerHTML = '<p style="color:red;padding:16px">Error loading form. Please refresh the page.</p>';
+        console.error('[GL] addSkuRow CRASHED:', err);
+        skuList.innerHTML = '<p style="color:red;padding:16px">Error: ' + err.message + '<br>Please refresh the page.</p>';
       }
+    } else {
+      console.error('[GL] sku-list element NOT FOUND in DOM!');
     }
     var dispEl = document.getElementById('f-order-id-display');
     if (dispEl) dispEl.textContent = 'Order No: DISP-' + Date.now().toString().slice(-6);
