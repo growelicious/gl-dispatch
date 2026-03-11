@@ -332,7 +332,7 @@
     <main class="main">
 
       <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
-      <div id="view-dashboard" class="view active">
+      <div id="view-dashboard" class="view active" style="display:block">
         <div class="page-header" style="margin-bottom:12px">
           <h1 id="dash-title">Dashboard</h1>
           <p id="dashDate"></p>
@@ -3749,10 +3749,21 @@ function initFormListeners() {
 
 function showView(name) {
   try {
-  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  // Hide ALL views with inline style (overrides any CSS)
+  var VIEW_IDS = ['view-dashboard','view-new-request','view-pending','view-all-requests','view-qc-checks'];
+  VIEW_IDS.forEach(function(vid) {
+    var v = document.getElementById(vid);
+    if (v) v.style.display = 'none';
+  });
+  // Show the target view
   var el = document.getElementById('view-' + name);
-  if (el) el.classList.add('active');
-  document.querySelectorAll('.si').forEach(function(i){ i.classList.remove('active'); });
+  if (el) { el.style.display = 'block'; el.style.minHeight = '100%'; }
+  // Update sidebar active state
+  var ALL_NAVS = ['nav-dashboard','nav-new','nav-pending','nav-all','nav-qc'];
+  ALL_NAVS.forEach(function(nid) {
+    var n = document.getElementById(nid);
+    if (n) n.classList.remove('active');
+  });
   var navMap = {'dashboard':'nav-dashboard','new-request':'nav-new','pending':'nav-pending','all-requests':'nav-all','qc-checks':'nav-qc'};
   var nav = document.getElementById(navMap[name]);
   if (nav) nav.classList.add('active');
@@ -3763,7 +3774,7 @@ function showView(name) {
     console.log('[GL] sku-list element found:', !!skuList);
     if (skuList) {
       try {
-        skuList.innerHTML = '<p style="color:var(--muted);padding:12px;font-size:12px">Loading form...</p>';
+        skuList.innerHTML = '';
         skuCounter = 0;
         console.log('[GL] calling addSkuRow...');
         addSkuRow();
