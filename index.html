@@ -895,6 +895,7 @@
 
 
 let editReqId = null;
+let currentView = "dashboard"; // track active view
 
 function openEdit(id) {
   const r = allRequests.find(x => x.id === id);
@@ -1753,6 +1754,8 @@ function renderDashboard() {
   const stats = document.getElementById('dash-stats');
   const tabs  = document.getElementById('dash-tabs');
   if (!tb) return;
+  // Only update visual elements when dashboard is the active view
+  const onDash = (currentView === 'dashboard');
 
   const STEP_KEYS = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
   const STEP_LABELS = {
@@ -1806,7 +1809,7 @@ function renderDashboard() {
       if (f2==='approved')       { buckets['invoice-done'].push(r); return; }
       if (f1==='approved')       { buckets['submitted-ceo'].push(r); return; }
     });
-    if (stats) stats.innerHTML =
+    if (stats && onDash) stats.innerHTML =
       _statCard('🔔 Pending Review',      buckets['pending-review'].length,  'var(--amber)', "switchDashTab(document.querySelector('[data-tab=\"pending-review\"]'),  'pending-review')")+
       _statCard('📤 Forwarded to CEO',    buckets['submitted-ceo'].length,   'var(--blue)',  "switchDashTab(document.querySelector('[data-tab=\"submitted-ceo\"]'),   'submitted-ceo')")+
       _statCard('🧾 Invoice/E-Way Pend.', buckets['invoice-pending'].length, 'var(--red)',   "switchDashTab(document.querySelector('[data-tab=\"invoice-pending\"]'), 'invoice-pending')")+
@@ -1888,7 +1891,7 @@ function renderDashboard() {
 
     // Stat cards
     const margin = totalRevenue > 0 ? ((totalPL/totalRevenue)*100).toFixed(1) : '—';
-    if (stats) stats.innerHTML =
+    if (stats && onDash) stats.innerHTML =
       _statCard('📦 MTD Orders', mtdOrderTon.toFixed(2)+' T', 'var(--navy)', "window._activeTab='ceo-orders';renderDashboard()")+
       _statCard('🚚 MTD Dispatched', mtdDispatchTon.toFixed(2)+' T', 'var(--blue)', "window._activeTab='ceo-dispatched';renderDashboard()")+
       _statCard('🏭 To Produce', toTon(toProduceKg).toFixed(2)+' T', 'var(--amber)', "window._activeTab='ceo-stock';renderDashboard()")+
@@ -1950,7 +1953,7 @@ function renderDashboard() {
     qcClearedKgP = allRequests.filter(r=>r.approvals?.qc?.status==='approved')
       .reduce((s,r)=>(r.skus||[]).reduce((a,k)=>a+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),s),0);
 
-    if (stats) stats.innerHTML =
+    if (stats && onDash) stats.innerHTML =
       _statCard('📦 MTD Orders', mtdOrderTonP.toFixed(2)+' T', 'var(--navy)', "window._activeTab='ceo-orders';renderDashboard()")+
       _statCard('🚚 MTD Dispatched', mtdDispatchTonP.toFixed(2)+' T', 'var(--blue)', "window._activeTab='ceo-dispatched';renderDashboard()")+
       _statCard('🏭 To Produce', toTon2(toProduceKgP).toFixed(2)+' T', 'var(--amber)', "window._activeTab='ceo-stock';renderDashboard()")+
@@ -1978,7 +1981,7 @@ function renderDashboard() {
     return k && r.approvals?.[k]?.status==='approved';
   }).length;
   showDashExport(false);
-  if (stats) stats.innerHTML =
+  if (stats && onDash) stats.innerHTML =
     _statCard('Total', allRequests.length, 'var(--navy)', "showView('all-requests')")+
     _statCard('Needs My Action', myPending, 'var(--amber)', "showView('pending')")+
     _statCard("I've Approved", myApproved, 'var(--green)', "filterAndGoto('approved')");
@@ -3749,6 +3752,7 @@ function initFormListeners() {
 
 function showView(name) {
   try {
+  currentView = name; // track for renderDashboard guard
   // Hide ALL views with inline style (overrides any CSS)
   var VIEW_IDS = ['view-dashboard','view-new-request','view-pending','view-all-requests','view-qc-checks'];
   VIEW_IDS.forEach(function(vid) {
@@ -3757,7 +3761,14 @@ function showView(name) {
   });
   // Show the target view
   var el = document.getElementById('view-' + name);
-  if (el) { el.style.display = 'block'; el.style.minHeight = '100%'; }
+  if (el) {
+    el.style.display = 'block';
+    el.style.minHeight = '100%';
+    el.style.background = (name === 'new-request') ? 'var(--bg)' : '';
+    console.log('[GL] view-'+name+' style.display set to block, el.offsetHeight=', el.offsetHeight, 'el.offsetParent=', el.offsetParent ? el.offsetParent.id||el.offsetParent.className : 'NULL');
+  } else {
+    console.error('[GL] ELEMENT NOT FOUND: view-'+name);
+  }
   // Update sidebar active state
   var ALL_NAVS = ['nav-dashboard','nav-new','nav-pending','nav-all','nav-qc'];
   ALL_NAVS.forEach(function(nid) {
