@@ -860,6 +860,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="globalToast" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#b91c1c;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:90vw;text-align:center"></div>
 
 
 <script data-cfasync="false">
@@ -877,6 +878,19 @@
   const auth    = firebase.auth();
   // Ensure fastest possible auth persistence
   try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch(e) {}
+
+  // ── GLOBAL ERROR GUARD ─────────────────────────────────────────────
+  // Catches any uncaught JS error and shows a toast instead of going blank.
+  window.addEventListener('error', function(ev) {
+    console.error('Uncaught error:', ev.message, ev.filename, ev.lineno);
+    var t = document.getElementById('globalToast');
+    if (t) { t.textContent = '⚠ App error: ' + ev.message; t.style.display='block'; setTimeout(function(){t.style.display='none';}, 8000); }
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    console.error('Unhandled promise rejection:', ev.reason);
+    var t = document.getElementById('globalToast');
+    if (t) { t.textContent = '⚠ Promise error: ' + ((ev.reason && ev.reason.message)||String(ev.reason)); t.style.display='block'; setTimeout(function(){t.style.display='none';}, 8000); }
+  });
   // Storage disabled (Spark plan) — upgrade to Blaze to enable photo upload
 
 
@@ -934,95 +948,140 @@ async function saveEdit() {
   try {
     const KG_PER_CASE = 10;
     const editRows = Array.from(document.querySelectorAll('#edit-sku-list .edit-sku-row'));
+    const origSkus = r.skus || [];
 
-    // Build updated SKUs array from current rows
-    const updatedSkus = editRows.map((row, idx) => {
-      const isNew   = row.getAttribute('data-is-new') === '1';
-      const product = row.querySelector('.edit-sku-product')?.value || row.getAttribute('data-product');
-      const spec    = row.querySelector('.edit-sku-spec')?.value    || row.getAttribute('data-spec');
-      const qty     = row.querySelector('.edit-sku-qty')?.value     || '0';
-      const qtyUnit = row.querySelector('.edit-sku-unit')?.value    || 'Kg';
-      const price   = row.querySelector('.edit-sku-price')?.value   || '';
+    // ── Build updatedSkus preserving original fields ──────────────────
+    const updatedSkus = editRows.map(row => {
+      const isNew    = row.getAttribute('data-is-new') === '1';
+      const origIdx  = parseInt(row.getAttribute('data-orig-idx') ?? '-1');
+      const product  = row.querySelector('.edit-sku-product')?.value || row.getAttribute('data-product') || '';
+      const spec     = row.querySelector('.edit-sku-spec')?.value    || row.getAttribute('data-spec')    || '';
+      const qty      = row.querySelector('.edit-sku-qty')?.value     || '0';
+      const qtyUnit  = row.querySelector('.edit-sku-unit')?.value    || 'Kg';
+      const price    = row.querySelector('.edit-sku-price')?.value   || '';
       if (isNew) {
-        return { product, spec, qty, qtyUnit, price, subspec:'', piecesKg:'', glaze:'' };
+        return { product, spec, qty, qtyUnit, price, subspec:'', piecesKg:'', glaze:'', isNewSku: true };
       } else {
-        return { ...(r.skus?.[idx] || {}), product, spec, qty, qtyUnit, price };
+        // Spread original SKU to preserve subspec/piecesKg/glaze/gstExempt etc.
+        const orig = origSkus[origIdx] || {};
+        return { ...orig, product, spec, qty, qtyUnit, price, isNewSku: false, _origIdx: origIdx };
       }
     });
 
-    // Adjust sku_stocks for each changed/new/removed SKU
-    const origSkus = r.skus || [];
+    // ── STOCK ADJUSTMENTS ─────────────────────────────────────────────
+    // Step A: For each original SKU — figure out what happened to it
+    //   - Still present with same/different qty → adjust delta
+    //   - Deleted (no matching row) → return full original qty to stock
+    const updatedOrigIdxSet = new Set(
+      updatedSkus.filter(u => !u.isNewSku).map(u => u._origIdx)
+    );
 
-    // Process original SKUs — return stock for removed ones, adjust delta for changed
+    const skuDeltasLog = [];
+
     for (let i = 0; i < origSkus.length; i++) {
-      const orig   = origSkus[i];
-      const upd    = updatedSkus[i]; // undefined if row was deleted
-      const origKg = toKg(parseFloat(orig.qty)||0, orig.qtyUnit||'Kg');
-      const newKg  = upd ? toKg(parseFloat(upd.qty)||0, upd.qtyUnit||'Kg') : 0;
-      const deltaKg = newKg - origKg; // negative = returning stock
-      if (Math.abs(deltaKg) < 0.001) continue;
+      const orig    = origSkus[i];
+      const origKg  = toKg(parseFloat(orig.qty) || 0, orig.qtyUnit || 'Kg');
+      const skuKey  = buildSkuKey(orig.product, orig.spec, orig.subspec, orig.piecesKg, orig.glaze);
 
-      const key  = buildSkuKey(orig.product, orig.spec, orig.subspec, orig.piecesKg, orig.glaze);
-      const snap = await db.collection('sku_stocks').where('key','==',key).get();
-      if (!snap.empty) {
-        const doc = snap.docs[0]; const sd = doc.data();
-        const deltaCases = deltaKg / KG_PER_CASE;
-        const newTotal   = Math.max(0, (sd.total||0) - deltaCases);
-        await doc.ref.update({ total: newTotal, totalKg: newTotal * KG_PER_CASE,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      let newKg = 0;
+      if (updatedOrigIdxSet.has(i)) {
+        // SKU still present — find its updated row
+        const updRow = updatedSkus.find(u => !u.isNewSku && u._origIdx === i);
+        newKg = toKg(parseFloat(updRow?.qty) || 0, updRow?.qtyUnit || 'Kg');
+      }
+      // else: newKg = 0 means deleted — full stock return
+
+      const deltaKg = newKg - origKg; // negative = return to stock, positive = deduct more
+      if (Math.abs(deltaKg) > 0.001) {
+        skuDeltasLog.push({
+          sku: [orig.product, orig.spec].filter(Boolean).join(' · '),
+          origKg, newKg, deltaKg,
+          action: newKg === 0 ? 'removed' : 'modified'
+        });
+
+        const snap = await db.collection('sku_stocks').where('key', '==', skuKey).get();
+        if (!snap.empty) {
+          const doc       = snap.docs[0];
+          const sd        = doc.data();
+          const deltaCases = deltaKg / KG_PER_CASE;
+          const newTotal  = Math.max(0, (sd.total || 0) - deltaCases);
+          await doc.ref.update({
+            total: newTotal,
+            totalKg: newTotal * KG_PER_CASE,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
       }
     }
 
-    // Process new SKUs — deduct their qty from stock
-    const newOnlySkus = updatedSkus.filter((u,i) => editRows[i]?.getAttribute('data-is-new')==='1');
-    for (const ns of newOnlySkus) {
+    // Step B: New SKUs — deduct from stock (once only)
+    const newSkus = updatedSkus.filter(u => u.isNewSku);
+    for (const ns of newSkus) {
       if (!ns.product || !ns.spec) continue;
-      const newKg = toKg(parseFloat(ns.qty)||0, ns.qtyUnit||'Kg');
+      const newKg = toKg(parseFloat(ns.qty) || 0, ns.qtyUnit || 'Kg');
       if (newKg < 0.001) continue;
-      const key  = buildSkuKey(ns.product, ns.spec, '', '', '');
-      const snap = await db.collection('sku_stocks').where('key','==',key).get();
+
+      // Use proper key including subspec/pieces/glaze if provided
+      const skuKey = buildSkuKey(ns.product, ns.spec, ns.subspec || '', ns.piecesKg || '', ns.glaze || '');
+      const snap = await db.collection('sku_stocks').where('key', '==', skuKey).get();
       if (!snap.empty) {
-        const doc = snap.docs[0]; const sd = doc.data();
-        const newTotal = Math.max(0, (sd.total||0) - newKg / KG_PER_CASE);
-        await doc.ref.update({ total: newTotal, totalKg: newTotal * KG_PER_CASE,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        const doc      = snap.docs[0];
+        const sd       = doc.data();
+        const newTotal = Math.max(0, (sd.total || 0) - newKg / KG_PER_CASE);
+        await doc.ref.update({
+          total: newTotal,
+          totalKg: newTotal * KG_PER_CASE,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
       }
+      skuDeltasLog.push({
+        sku: [ns.product, ns.spec].filter(Boolean).join(' · '),
+        origKg: 0, newKg, deltaKg: newKg,
+        action: 'added'
+      });
     }
 
-    // Build delta summary for log
-    const skuDeltas = origSkus.map((orig,i) => {
-      const upd   = updatedSkus[i];
-      const origKg = toKg(parseFloat(orig.qty)||0, orig.qtyUnit||'Kg');
-      const newKg  = upd ? toKg(parseFloat(upd.qty)||0, upd.qtyUnit||'Kg') : 0;
-      return { sku: [orig.product, orig.spec].filter(Boolean).join(' · '),
-               origKg, newKg, deltaKg: newKg - origKg };
-    }).filter(d => Math.abs(d.deltaKg) > 0.001);
+    // ── Strip internal tracking fields before saving ──────────────────
+    const cleanedSkus = updatedSkus.map(({ isNewSku, _origIdx, ...rest }) => rest);
 
+    // ── Track removed SKUs for log ────────────────────────────────────
+    const removedSkus = origSkus
+      .filter((_, i) => !updatedOrigIdxSet.has(i))
+      .map(s => [s.product, s.spec].filter(Boolean).join(' · '));
+
+    const addedSkus = newSkus
+      .map(s => [s.product, s.spec].filter(Boolean).join(' · '));
+
+    // ── Save to Firestore ─────────────────────────────────────────────
     const dispDate = document.getElementById('edit-dispatchDate')?.value;
     const vehDate  = document.getElementById('edit-vehicleDate')?.value;
     const notes    = document.getElementById('edit-notes')?.value;
 
     await db.collection('dispatch_requests').doc(editReqId).update({
-      skus:         updatedSkus,
-      dispatchDate: dispDate || r.dispatchDate,
-      vehicleDate:  vehDate  || r.vehicleDate,
-      notes:        notes    !== undefined ? notes : r.notes,
-      lastEditedBy: currentUser.email,
-      lastEditedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      skus:             cleanedSkus,
+      dispatchDate:     dispDate || r.dispatchDate,
+      vehicleDate:      vehDate  || r.vehicleDate,
+      notes:            notes !== undefined ? notes : r.notes,
+      lastEditedBy:     currentUser.email,
+      lastEditedAt:     firebase.firestore.FieldValue.serverTimestamp(),
       lastModifyReason: reasonType + ': ' + reasonNote,
       modifyLog: firebase.firestore.FieldValue.arrayUnion({
-        by: currentUser.email, role: currentRole,
-        reason: reasonType, note: reasonNote,
-        time: new Date().toISOString(), skuDeltas,
-        addedSkus:   newOnlySkus.map(s => [s.product, s.spec].filter(Boolean).join(' · ')),
-        removedSkus: origSkus.slice(updatedSkus.length).map(s => [s.product, s.spec].filter(Boolean).join(' · ')),
+        by:         currentUser.email,
+        role:       currentRole,
+        reason:     reasonType,
+        note:       reasonNote,
+        time:       new Date().toISOString(),
+        skuDeltas:  skuDeltasLog,
+        addedSkus,
+        removedSkus,
       }),
     });
 
     document.getElementById('editOverlay').classList.remove('open');
     toast('✓ Order modified — stock adjusted');
-  } catch(e) {
-    toast('Error: ' + e.message, true); console.error(e);
+  } catch(err) {
+    toast('Error: ' + err.message, true);
+    console.error(err);
   }
   btn.innerHTML = '💾 Save & Adjust Stock'; btn.disabled = false;
 }
@@ -1142,16 +1201,26 @@ onAuthStateChanged(user => {
         '— Requests awaiting your approval are shown below.'
       }`;
 
-    listenToRequests();
-    listenToQCLogs();
-    loadCustomOptions();
-    initFormListeners();
-    renderAll(); // clear Loading state immediately on auth
+    try {
+      listenToRequests();
+      listenToQCLogs();
+      loadCustomOptions();
+      initFormListeners();
+      renderAll();
+    } catch(err) {
+      console.error('Auth init error:', err);
+    }
   } else {
     currentUser = null;
     currentRole = null;
-    document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('appShell').style.display = 'none';
+    allRequests = [];
+    try {
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('appShell').style.display   = 'none';
+      // Clear any sensitive data from the UI
+      var dashTable = document.getElementById('dashboardTable');
+      if (dashTable) dashTable.innerHTML = '';
+    } catch(e) { console.warn('Logout UI cleanup:', e); }
   }
 });
 
@@ -1174,7 +1243,21 @@ async function doLogin() {
 }
 
 function doLogout() {
-  auth.signOut();
+  try {
+    auth.signOut().then(function() {
+      // onAuthStateChanged will fire and hide appShell / show loginScreen
+      // But also do it here immediately for instant feedback
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('appShell').style.display   = 'none';
+      currentUser = null;
+      currentRole = null;
+      allRequests = [];
+    }).catch(function(e) {
+      toast('Sign-out error: ' + e.message, true);
+    });
+  } catch(e) {
+    toast('Sign-out error: ' + e.message, true);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1205,10 +1288,15 @@ function listenToQCLogs() {
 // RENDER
 // ════════════════════════════════════════════════════════════════════
 function renderAll() {
+  try {
   renderStats();
   renderDashboard();
   renderPending();
   renderAllRequests();
+
+  } catch(err) {
+    console.error('renderAll error:', err);
+  }
 }
 
 function renderStats() {
@@ -1318,6 +1406,7 @@ function buildEditSkuRow(s, idx, container, isNew) {
   const div = document.createElement('div');
   div.className = 'edit-sku-row';
   div.setAttribute('data-is-new',    isNew ? '1' : '0');
+  div.setAttribute('data-orig-idx',  isNew ? '-1' : String(idx));  // original index in r.skus
   div.setAttribute('data-orig-qty',  isNew ? '0' : (s.qty    || 0));
   div.setAttribute('data-orig-unit', isNew ? 'Kg': (s.qtyUnit|| 'Kg'));
   div.setAttribute('data-product',   s.product || '');
@@ -1513,6 +1602,7 @@ function getOrderStage(r) {
 }
 
 function _renderCeoTab(tab, m, tb) {
+  try {
   const thead = document.getElementById('dash-thead');
   const titleEl = document.getElementById('dash-table-title');
   const toT = (kg) => (kg/1000).toFixed(2);
@@ -1630,6 +1720,11 @@ function _renderCeoTab(tab, m, tb) {
       </tr>`;
     }).join('');
   }
+
+  } catch(err) {
+    console.error('_renderCeoTab error:', err);
+    if (tb) tb.innerHTML = '<tr><td colspan="7" class="empty"><p>Error loading data. Please refresh.</p></td></tr>';
+  }
 }
 
 function toggleCeoHoldReason() {
@@ -1653,6 +1748,7 @@ function pill(status, label) {
 }
 
 function renderDashboard() {
+  try {
   const tb    = document.getElementById('dashboardTable');
   const stats = document.getElementById('dash-stats');
   const tabs  = document.getElementById('dash-tabs');
@@ -1755,7 +1851,7 @@ function renderDashboard() {
       const skuKg   = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0, k.qtyUnit||'Kg'), 0);
       const skuRev  = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'), 0);
 
-      if (isMTD) mtdOrderTon += toTon(skuKg);
+      if (isMTD && r.status!=='rejected') mtdOrderTon += toTon(skuKg);  // exclude withdrawn
       if (isMTD && r.status==='approved') mtdDispatchTon += toTon(skuKg);
 
       // Stock: sum GL+CF from SKU rows
@@ -1818,55 +1914,59 @@ function renderDashboard() {
     return;
   }
 
-  // ── PLANNER — pipeline overview ───────────────────────────────
+  // ── PLANNER — same strategic dashboard as CEO ────────────────
   if (currentRole === 'Planner') {
-    const ftabs = document.getElementById('dash-tabs-finance');
-    const ctabs = document.getElementById('dash-tabs-ceo');
-    if (ftabs) ftabs.style.display = 'none';
-    if (ctabs) ctabs.style.display = 'none';
-    if (tabs)  tabs.style.display  = 'none';
-
-    const STEP_LABELS2 = {finance1:'Finance Review',ceo:'CEO',gm:'GM',pm:'PM',qc:'QC',finance2:'Finance Invoice',dispatch:'Dispatch'};
-    const STEP_KEYS2   = ['finance1','ceo','gm','pm','qc','finance2','dispatch'];
-    const pipelineCounts = {};
-    STEP_KEYS2.forEach(k => pipelineCounts[k] = 0);
-    let approvedCount = 0;
-    allRequests.forEach(r => {
-      if (r.status==='approved') { approvedCount++; return; }
-      const stage = getOrderStage(r);
-      if (STEP_KEYS2.includes(stage)) pipelineCounts[stage]++;
-    });
-    if (stats) stats.innerHTML =
-      STEP_KEYS2.map(k => _statCard(STEP_LABELS2[k], pipelineCounts[k],
-        pipelineCounts[k]>0?'var(--amber)':'var(--green)', `showPipelineFilter('${k}')`)).join('') +
-      _statCard('✅ Approved', approvedCount, 'var(--green)', "showPipelineFilter('done')") +
-      _statCard('📦 Total', allRequests.length, 'var(--navy)', "showPipelineFilter('all')");
+    if (tabs)  tabs.style.display  = 'block';
+    const ftabsP = document.getElementById('dash-tabs-finance');
+    const ctabsP = document.getElementById('dash-tabs-ceo');
+    if (ftabsP) ftabsP.style.display = 'none';
+    if (ctabsP) ctabsP.style.display = 'flex';
 
     showDashExport(true);
-    const thead = document.getElementById('dash-thead');
-    if (thead) thead.innerHTML = '<tr><th>Order No</th><th>Customer</th><th>Dispatch Date</th><th>Current Stage</th><th>Status</th><th>Action</th></tr>';
-    const filter = window._dashPipelineFilter || 'all';
-    const titleEl = document.getElementById('dash-table-title');
-    if (titleEl) titleEl.textContent = filter==='all'?'All Requests':filter==='done'?'✅ Fully Approved':'Pending at: '+(STEP_LABELS2[filter]||filter);
-    const rows = allRequests.filter(r => {
-      if (filter==='all') return true;
-      if (filter==='done') return r.status==='approved';
-      return getOrderStage(r)===filter;
+
+    const now = new Date();
+    const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const toTon2 = (kg) => kg / 1000;
+
+    let mtdOrderTonP=0, mtdDispatchTonP=0, toProduceKgP=0, qcClearedKgP=0;
+    let totalRevenueP=0, totalPLP=0;
+    const pendingPlannerApproval = [];
+
+    allRequests.forEach(r => {
+      const created = r.createdAt?.toDate ? r.createdAt.toDate() : null;
+      const isMTD   = created && created >= mtdStart;
+      const skuKg   = (r.skus||[]).reduce((s,k)=>s+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      if (isMTD && r.status!=='rejected') mtdOrderTonP  += toTon2(skuKg);
+      if (isMTD && r.status==='approved') mtdDispatchTonP += toTon2(skuKg);
+      const fa = r.approvals?.finance1||{};
+      const rev = (r.skus||[]).reduce((s,k)=>s+(parseFloat(k.price)||0)*toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),0);
+      totalRevenueP += rev;
+      totalPLP += parseFloat(fa.pl)||0;
+      if (r.status==='pending' && r.approvals?.finance1?.status==='approved' && (!r.approvals?.ceo||r.approvals.ceo.status==='pending'))
+        pendingPlannerApproval.push(r);
     });
-    if (!rows.length) { tb.innerHTML = `<tr><td colspan="6" class="empty"><div class="ei">📋</div><p>No requests here.</p></td></tr>`; return; }
-    tb.innerHTML = rows.map(r => {
-      const stage = getOrderStage(r);
-      const isApproved = stage==='done';
-      const stageName = isApproved?'✅ Fully Approved':('⏳ Pending at '+(STEP_LABELS2[stage]||stage));
-      return `<tr>
-        <td><span class="tag">${r.dispatchId||r.id.slice(0,10)}</span></td>
-        <td style="font-weight:600">${r.buyer||'—'}</td>
-        <td style="font-size:12px">${r.dispatchDate||'—'}</td>
-        <td style="font-size:12px;font-weight:600;color:${isApproved?'var(--green)':'var(--amber)'}">${stageName}</td>
-        <td>${pill(r.status)}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${r.id}')">View ›</button></td>
-      </tr>`;
-    }).join('');
+    toProduceKgP = allRequests.filter(r=>r.status==='pending')
+      .reduce((s,r)=>(r.skus||[]).reduce((a,k)=>a+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),s),0);
+    qcClearedKgP = allRequests.filter(r=>r.approvals?.qc?.status==='approved')
+      .reduce((s,r)=>(r.skus||[]).reduce((a,k)=>a+toKg(parseFloat(k.qty)||0,k.qtyUnit||'Kg'),s),0);
+
+    if (stats) stats.innerHTML =
+      _statCard('📦 MTD Orders', mtdOrderTonP.toFixed(2)+' T', 'var(--navy)', "window._activeTab='ceo-orders';renderDashboard()")+
+      _statCard('🚚 MTD Dispatched', mtdDispatchTonP.toFixed(2)+' T', 'var(--blue)', "window._activeTab='ceo-dispatched';renderDashboard()")+
+      _statCard('🏭 To Produce', toTon2(toProduceKgP).toFixed(2)+' T', 'var(--amber)', "window._activeTab='ceo-stock';renderDashboard()")+
+      _statCard('✅ QC Cleared', toTon2(qcClearedKgP).toFixed(2)+' T', 'var(--green)', "window._activeTab='ceo-stock';renderDashboard()")+
+      _statCard('📊 P&L', '₹'+totalPLP.toLocaleString('en-IN',{maximumFractionDigits:0}), totalPLP>=0?'var(--green)':'var(--red)', "window._activeTab='ceo-pl';renderDashboard()")+
+      _statCard('🔔 In Progress', allRequests.filter(r=>r.status==='pending').length, 'var(--amber)', "window._activeTab='ceo-approval';renderDashboard()");
+
+    const activeTabP = (window._activeTab && window._activeTab.startsWith('ceo-')) ? window._activeTab : 'ceo-orders';
+    _renderCeoTab(activeTabP, {allRequests, pendingCEO: pendingPlannerApproval, mtdStart,
+      toTon: toTon2, KG_PER_TON:1000, mtdOrderTon:mtdOrderTonP, mtdDispatchTon:mtdDispatchTonP,
+      toProduceKg:toProduceKgP, qcClearedKg:qcClearedKgP, totalRevenue:totalRevenueP,
+      totalCost:0, totalPL:totalPLP}, tb);
+
+    document.querySelectorAll('#dash-tabs-ceo .dash-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === activeTabP);
+    });
     return;
   }
 
@@ -1903,6 +2003,10 @@ function renderDashboard() {
       <td><button class="btn ${urgent?'btn-primary':'btn-ghost'} btn-sm" onclick="openDetail('${r.id}')">${urgent?'Review ›':'View ›'}</button></td>
     </tr>`;
   }).join('');
+
+  } catch(err) {
+    console.error('renderDashboard error:', err);
+  }
 }
 
 function showPipelineFilter(filter) {
@@ -2244,12 +2348,18 @@ async function submitRequest() {
       glaze:    row.querySelector('.sku-glaze').value,
       pkgType, pkgSpec:isFillet?row.querySelector('.sku-pkg-spec').value:'',
       price, qty:qv, qtyUnit:qu,
+      gstExempt: row.querySelector('.sku-gst-exempt')?.value || 'No',
       stocks:stocksVal, stockUnit:sUnit, glWh, cfWh, productionPlan:prodPlan});
   }
   const buyer=buyerSel==='Others'?document.getElementById('f-buyer-others').value.trim():buyerSel;
   if (buyerSel==='Others') saveCustomOption('buyers', buyer);
   const payFinal=payment==='Others'?'Others: '+document.getElementById('f-payment-others').value.trim():payment;
   const btn=document.getElementById('submitBtn');
+  // Validate: must have at least one SKU
+  if (!skus.length) {
+    toast('Please add at least one SKU before submitting.', true);
+    return;
+  }
   btn.innerHTML='<span class="loading-spinner"></span> Submitting...'; btn.disabled=true;
   try {
     const dispatchId='DISP-'+Date.now().toString().slice(-6);
@@ -2281,8 +2391,10 @@ async function submitRequest() {
     skuCounter=0; addSkuRow();
     showView('dashboard');
     toast('✓ Request '+dispatchId+' submitted to Finance for review.');
-  } catch(e){toast('Error: '+e.message,true);}
-  btn.innerHTML='Submit for Approval'; btn.disabled=false;
+  } catch(e){
+    toast('Error: '+e.message, true);
+    btn.innerHTML='Submit for Approval'; btn.disabled=false;
+  }
 }
 
 
@@ -2405,15 +2517,24 @@ function openDetail(id) {
         '<th style="padding:6px 8px;text-align:left">Spec</th>'+
         '<th style="padding:6px 8px;text-align:right">Qty</th>'+
         '<th style="padding:6px 8px;text-align:right">Price/unit</th>'+
+        '<th style="padding:6px 8px;text-align:center">GST</th>'+
         '<th style="padding:6px 8px;text-align:right">Value</th>'+
         '</tr></thead><tbody>'+
         (r.skus||[]).map(s=>{
           const val=(parseFloat(s.price)||0)*toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg');
+          const gstEx = s.gstExempt==='Yes';
+          const gstBadge = gstEx
+            ? '<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700">Exempt</span>'
+            : '<span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700">5% GST</span>';
+          const gstCell = (currentRole==='Finance Approver' && isMyTurn)
+            ? '<select class="fin-sku-gst-sel" data-idx="'+s.product+'|'+s.spec+'" style="padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px"><option value="No"'+(gstEx?'':' selected')+'>5% GST</option><option value="Yes"'+(gstEx?' selected':'')+'>Exempt</option></select>'
+            : gstBadge;
           return '<tr style="border-bottom:1px solid #eee">'+
             '<td style="padding:6px 8px">'+s.product+'</td>'+
             '<td style="padding:6px 8px">'+s.spec+(s.subspec?' / '+s.subspec:'')+'</td>'+
             '<td style="padding:6px 8px;text-align:right">'+toKg(parseFloat(s.qty)||0, s.qtyUnit||'Kg').toLocaleString('en-IN')+' Kg</td>'+
             '<td style="padding:6px 8px;text-align:right">₹'+parseFloat(s.price||0).toLocaleString('en-IN')+'</td>'+
+            '<td style="padding:6px 8px;text-align:center">'+gstCell+'</td>'+
             '<td style="padding:6px 8px;text-align:right;font-weight:600">₹'+val.toLocaleString('en-IN')+'</td>'+
             '</tr>';
         }).join('')+'</tbody></table>';
@@ -2577,7 +2698,7 @@ function openDetail(id) {
   const plannerActPanel = document.getElementById('d-planner-actions');
   if (plannerActPanel) {
     // Only Planner can see the full actions panel (Modify + Withdraw)
-    const canActOnOrder = currentRole === 'Planner' && r.status === 'pending';
+    const canActOnOrder = (currentRole === 'Planner' || currentRole === 'Production Manager') && r.status === 'pending';
     plannerActPanel.style.display = canActOnOrder ? 'block' : 'none';
     const titleEl = document.getElementById('d-planner-actions-title');
     if(titleEl) titleEl.textContent = '📝 Planner Actions';
@@ -2597,11 +2718,11 @@ function openDetail(id) {
         modLog.map(m=>`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">
           <b>${m.reason}</b>${m.note?': '+m.note:''}<br>
           <span style="color:var(--muted)">By ${m.role||''} · ${m.time?new Date(m.time).toLocaleDateString('en-IN'):''}</span>
-          ${(m.skuDeltas||[]).filter(d=>Math.abs(d.deltaKg||0)>0.001).map(d=>
-            `<div style="color:${d.deltaKg>0?'#92400e':'#065f46'};margin-top:3px;font-size:11px">
-              ${d.sku}: ${d.origKg} → ${d.newKg} Kg
-              <b>(${d.deltaKg>0?'+':''}${d.deltaKg.toFixed(1)} Kg)</b>
-            </div>`).join('')}
+          ${(m.skuDeltas||[]).filter(d=>Math.abs(d.deltaKg||0)>0.001).map(d=>{
+            const ac=d.action==='added'?'➕ Added':d.action==='removed'?'🗑 Removed':'✏️ Changed';
+            const dc=d.action==='added'?'#1d4ed8':d.action==='removed'?'#991b1b':d.deltaKg>0?'#92400e':'#065f46';
+            return `<div style="color:${dc};margin-top:3px;font-size:11px">${ac} · ${d.sku}: ${d.origKg}kg → ${d.newKg}kg <b>(${d.deltaKg>0?'+':''}${d.deltaKg.toFixed(1)} Kg)</b></div>`;
+          }).join('')}
         </div>`).join('');
     } else {
       modLogEl.style.display = 'none';
@@ -2723,7 +2844,7 @@ async function ceoSubmit() {
 }
 
 async function financeSubmit() {
-  const r = allRequests.find(x => x.id === activeReqId);
+  const r = allRequests.find(x => x.id === activeReqId); const rCurrent = r;
   if (!r) return;
   const finKey  = getChainKey('Finance Approver', r);
   const isStep2 = finKey === 'finance2';
@@ -2732,6 +2853,16 @@ async function financeSubmit() {
   const holdReason   = document.getElementById('d-fin-hold-reason').value;
   const kyc          = document.getElementById('d-fin-kyc').value;
   const gst          = document.getElementById('d-fin-gst').value;
+  // Collect per-SKU GST overrides from Finance editable dropdowns
+  const skuGstOverrides = {};
+  document.querySelectorAll('.fin-sku-gst-sel').forEach(sel => {
+    skuGstOverrides[sel.dataset.idx] = sel.value;
+  });
+  // Apply overrides back to skus
+  const updatedSkusWithGst = (rCurrent ? rCurrent.skus||[] : []).map(s => {
+    const key = s.product+'|'+s.spec;
+    return skuGstOverrides[key] ? {...s, gstExempt: skuGstOverrides[key]} : s;
+  });
   const tcs          = document.getElementById('d-fin-tcs').value;
   const creditLimit  = document.getElementById('d-fin-credit-limit').value;
   const outstanding  = document.getElementById('d-fin-outstanding').value;
@@ -2795,6 +2926,7 @@ async function financeSubmit() {
       ['approvals.'+finKey+'.holdReason']:      holdReason || '',
       ['approvals.'+finKey+'.decision']:        decision,
       stage: nextStage,
+      ...(updatedSkusWithGst && updatedSkusWithGst.length ? {skus: updatedSkusWithGst} : {}),
     };
     if (isHold) update.status = 'pending'; // keep in pending for planner to see
     await db.collection('dispatch_requests').doc(activeReqId).update(update);
@@ -3207,6 +3339,11 @@ function addSkuRow(prefill){
           '<span style="align-self:center;color:var(--muted);font-size:14px">₹</span>'+
           '<input type="number" class="sku-price" placeholder="0.00" min="0" step="0.01" style="flex:1;min-width:0">'+
         '</div></div>'+
+      '<div class="field" style="margin-top:8px"><label style="font-size:11px">GST Exempted</label>'+
+        '<select class="sku-gst-exempt" style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
+          '<option value="No">No — 5% GST Applicable</option>'+
+          '<option value="Yes">Yes — GST Exempted</option>'+
+        '</select></div>'+
     '</div>'+
 
     // ── STOCKS ───────────────────────────────────────────────────────
@@ -3557,6 +3694,8 @@ async function saveCustomOption(type, value) {
 
 // ── FORM CONDITIONAL FIELDS ──────────────────────────────────────────
 function initFormListeners() {
+  // Safe to call multiple times — listeners are idempotent
+  try {
   const pay = document.getElementById('f-payment');
   if (pay) pay.addEventListener('change', function(){
     document.getElementById('f-payment-others-wrap').style.display=this.value==='Others'?'block':'none';
@@ -3600,9 +3739,12 @@ function initFormListeners() {
     if (wrap) wrap.style.display = this.value === 'GL' ? 'block' : 'none';
   });
   // SKU list and Add SKU button are now seeded in showView('new-request')
+
+  } catch(err) { console.warn('initFormListeners error:', err); }
 }
 
 function showView(name) {
+  try {
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
   var el = document.getElementById('view-' + name);
   if (el) el.classList.add('active');
@@ -3613,15 +3755,30 @@ function showView(name) {
   // Re-initialise new-request form each time it's shown
   if (name === 'new-request') {
     var skuList = document.getElementById('sku-list');
-    if (skuList) { skuList.innerHTML = ''; skuCounter = 0; addSkuRow(); }
+    if (skuList) {
+      try {
+        skuList.innerHTML = '';
+        skuCounter = 0;
+        addSkuRow();
+      } catch(err) {
+        console.error('addSkuRow error:', err);
+        skuList.innerHTML = '<p style="color:red;padding:16px">Error loading form. Please refresh the page.</p>';
+      }
+    }
     var dispEl = document.getElementById('f-order-id-display');
     if (dispEl) dispEl.textContent = 'Order No: DISP-' + Date.now().toString().slice(-6);
-    // Ensure Add SKU button is wired (safe to add multiple times — idempotent via flag)
+    // Re-wire Add SKU button every time (idempotent via flag)
     var addBtn = document.getElementById('addSkuBtn');
     if (addBtn && !addBtn._wired) {
       addBtn.addEventListener('click', function(){ addSkuRow(); });
       addBtn._wired = true;
     }
+    // Re-wire form listeners so date pickers & dropdowns work after DOM reset
+    try { initFormListeners(); } catch(e) { console.warn('initFormListeners:', e); }
+  }
+
+  } catch(err) {
+    console.error('showView error:', err);
   }
 }
 
